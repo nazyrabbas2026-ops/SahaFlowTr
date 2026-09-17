@@ -1,0 +1,135 @@
+import { Inject, Injectable } from "@nestjs/common";
+import { Prisma } from "@sahaflow/database";
+import { DatabaseService } from "../database/database.service";
+
+@Injectable()
+export class EmployeesService {
+  constructor(@Inject(DatabaseService) private readonly db: DatabaseService) {}
+
+  async listSkills(organizationId: string) {
+    return this.db.skill.findMany({
+      where: { organizationId, active: true },
+      orderBy: { name: "asc" },
+    });
+  }
+
+  async createSkill(
+    organizationId: string,
+    input: { key: string; name: string; category: string },
+  ) {
+    return this.db.skill.upsert({
+      where: { organizationId_key: { organizationId, key: input.key } },
+      create: { organizationId, ...input },
+      update: { name: input.name, category: input.category, active: true },
+    });
+  }
+
+  async listByOrganization(organizationId: string) {
+    return this.db.employeeProfile.findMany({
+      where: { organizationId, active: true },
+      include: {
+        member: { select: { id: true, user: { select: { name: true, email: true } } } },
+        skills: { include: { skill: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+  }
+
+  async getById(organizationId: string, employeeId: string) {
+    return this.db.employeeProfile.findUniqueOrThrow({
+      where: { organizationId_id: { organizationId, id: employeeId } },
+      include: {
+        member: { select: { id: true, user: { select: { name: true, email: true } } } },
+        skills: { include: { skill: true } },
+      },
+    });
+  }
+
+  async create(
+    organizationId: string,
+    memberId: string,
+    input: {
+      employeeNumber: string;
+      title: string;
+      phone?: string;
+      homeCity?: string;
+      homeDistrict?: string;
+    },
+  ) {
+    return this.db.employeeProfile.create({
+      data: {
+        organizationId,
+        memberId,
+        employeeNumber: input.employeeNumber,
+        title: input.title,
+        phone: input.phone,
+        homeCity: input.homeCity,
+        homeDistrict: input.homeDistrict,
+      },
+      include: {
+        member: { select: { id: true, user: { select: { name: true, email: true } } } },
+        skills: { include: { skill: true } },
+      },
+    });
+  }
+
+  async update(
+    organizationId: string,
+    employeeId: string,
+    data: Prisma.EmployeeProfileUpdateInput,
+  ) {
+    return this.db.employeeProfile.update({
+      where: { organizationId_id: { organizationId, id: employeeId } },
+      data,
+      include: {
+        member: { select: { id: true, user: { select: { name: true, email: true } } } },
+        skills: { include: { skill: true } },
+      },
+    });
+  }
+
+  async addSkill(
+    organizationId: string,
+    employeeId: string,
+    skillId: string,
+    level: number,
+  ) {
+    return this.db.employeeSkill.upsert({
+      where: { organizationId_employeeId_skillId: { organizationId, employeeId, skillId } },
+      create: { organizationId, employeeId, skillId, level },
+      update: { level },
+    });
+  }
+
+  async removeSkill(organizationId: string, employeeId: string, skillId: string) {
+    return this.db.employeeSkill.delete({
+      where: { organizationId_employeeId_skillId: { organizationId, employeeId, skillId } },
+    });
+  }
+
+  async recordLocation(
+    organizationId: string,
+    memberId: string,
+    latitude: number,
+    longitude: number,
+    jobId?: string,
+  ) {
+    return this.db.technicianLocation.create({
+      data: {
+        organizationId,
+        memberId,
+        latitude,
+        longitude,
+        jobId,
+        recordedAt: new Date(),
+      },
+    });
+  }
+
+  async getRecentLocation(organizationId: string, memberId: string) {
+    return this.db.technicianLocation.findFirst({
+      where: { organizationId, memberId },
+      orderBy: { recordedAt: "desc" },
+    });
+  }
+}
