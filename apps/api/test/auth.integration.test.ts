@@ -27,6 +27,7 @@ async function applyMigrations() {
     "202609140002_onboarding_member_delete_policy",
     "202609140003_crm_customers",
     "20260914125354_jobs",
+    "20260915122624_field_service_operations",
   ]) {
     const sql = await readFile(
       resolve(
