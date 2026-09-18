@@ -453,14 +453,36 @@ gelmez — yukarıdaki KNOWN ISSUES'ta işaretli recurring/SLA, takvim/drag-drop
 provider map ve genel test kapsamı eksiklikleri hâlâ açık; sadece CI'ın
 kırmızı olma nedeni ortadan kalktı.
 
-**Yeni bulgu (18.09.2026, `pnpm test:e2e` ilk kez bu tur çalıştırıldı)**:
+**Bulgu (18.09.2026, `pnpm test:e2e` ilk kez bu tur çalıştırıldı) — DÜZELTİLDİ**:
 `tests/e2e/foundation.spec.ts` içindeki "creates a customer and opens the
 customer 360 record" ve "creates a job and opens its workflow history"
-senaryoları `main` üzerinde de başarısız — form submit sonrası ilgili detay
-başlığı hiç render olmuyor (sayfa liste görünümünde kalıyor, bir `alert`
-role'ü beliriyor). Bu, `git stash` ile main'e geçilip aynı testin orada da
-başarısız olduğu doğrulanarak, sonradan eklenen jobs.tsx düzenleme/not
-özelliğinden bağımsız, önceden var olan bir hata olduğu kanıtlandı — CI
-`pnpm lint`/`pnpm test` bu oturumdan önce zaten kırmızı olduğu için
-`test:e2e` adımına hiç ulaşmamış ve bu hata fark edilmemiş olabilir. Kök
-neden henüz araştırılmadı; ayrı bir `fix/` dalında ele alınmalı.
+senaryoları `main` üzerinde de başarısızdı — form submit sonrası ilgili detay
+başlığı hiç render olmuyordu (sayfa liste görünümünde kalıyor, bir `alert`
+role'ü beliriyordu). CI `pnpm lint`/`pnpm test` bu oturumdan önce zaten
+kırmızı olduğu için `test:e2e` adımına hiç ulaşmamış ve bu hata fark
+edilmemiş olabilir.
+
+Kök sebep bulundu ve `fix/e2e-customer-job-creation` dalında düzeltildi:
+`apps/web/app/page.tsx`'teki workspace-yeniden-yükleme `useEffect`'i,
+`onChanged`/`onCustomerCreated` her tetiklendiğinde (yeni kayıt oluşturma
+sonrası metrikleri tazelemek için) `workspace` state'ini önce `null`'a
+çekiyordu; `{workspace && (...)}` koşulu yüzünden bu, o anki tüm sekme
+içeriğini (Jobs/Customers dahil, az önce oluşturulan kaydın detay
+görünümüyle birlikte) anlık olarak unmount edip fetch tamamlanınca sıfırdan
+yeniden mount ediyordu — kullanıcı yeni oluşturduğu kaydın detayını görmeden
+listeye geri düşüyordu. Düzeltme: `workspace` yalnızca gerçek bir
+organizasyon değişiminde (`organizationId` değiştiğinde) `null`'a çekiliyor;
+salt metrik yenilemesinde mevcut veri korunuyor, böylece alt bileşenin
+local state'i (`detail`) hayatta kalıyor.
+
+Ayrı bir bulgu: bu araştırma sırasında `C:\Users\nazyr\OneDrive\Desktop\Sahaflow`
+adında, aynı GitHub reposunun `f484e4b` commit'inde donmuş kalmış ayrı bir
+checkout'ta saatlerdir çalışan bir `next dev -p 3100` sunucusu tespit edildi.
+Playwright'ın `reuseExistingServer` ayarı bu sunucuyu bizim projemizin
+sunucusu sanıp yeniden kullanıyordu, bu da oturum boyunca bazı `test:e2e`
+sonuçlarının güvenilmez olmasına yol açmış olabilir. O checkout tamamen
+temizdi (commit edilmemiş/push edilmemiş hiçbir şey yoktu), kullanıcı onayı
+alınarak süreçleri sonlandırıldı ve port 3100 boşaltıldı.
+
+Doğrulama: `fix/e2e-customer-job-creation` dalında `pnpm test:e2e` **8/8**
+geçti (iki kez tekrarlanarak teyit edildi).
