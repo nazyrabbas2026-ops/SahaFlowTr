@@ -437,20 +437,25 @@ kapasite/seyahat, açıklanabilir skor ve provider map."
   `toDateKey` UTC, `startOfWeek`/`addDays` yerel saat kullanıyordu; bu
   karışım pozitif UTC ofsetli saat dilimlerinde (Türkiye dahil) takvim
   gününü bir gün geri kaydırıyordu. Tüm yardımcı fonksiyonlar yerel-saat
-  tutarlı hale getirilerek düzeltildi. Takvim bileşeninin kendisi (React
-  render + gerçek sürükleme etkileşimi) için ayrı bir component/E2E testi
-  yazılmadı — proje E2E'de `page.route` mock'ları kullanıyor ve gerçek
-  dnd-kit pointer sürüklemesini simüle etmiyor; bu bir sonraki iyileştirme.
+  tutarlı hale getirilerek düzeltildi.
+- **[18.09.2026, üçüncü ekleme]** `tests/e2e/dispatch-calendar.spec.ts`: 3
+  yeni Playwright E2E senaryosu — aynı gün farklı teknisyene sürükleme,
+  farklı güne sürükleme (her ikisi de `page.reload()` sonrası kalıcılığı
+  doğruluyor) ve hafta/ay toggle. `@dnd-kit/core` kaynağı incelenerek
+  `PointerSensor`'ın yalnızca gerçek `pointerdown`/`pointermove`/`pointerup`
+  event'lerini dinlediği doğrulandı; sürükleme `page.mouse.move/down/up` ile
+  simüle edildi (native HTML5 drag veya dblclick değil). 3 kez tekrarlanarak
+  (9/9) kararlılık teyit edildi.
 
 ### KNOWN ISSUES
 
-- Ay görünümü, gerçek kapasite/seyahat süresi hesaplaması ve provider map
+- Gün görünümü, gerçek kapasite/seyahat süresi hesaplaması ve provider map
   hâlâ yok; Faz 6 kabul ölçütünün "aday önerisi + atama", "açıklanabilir
-  skor" ve artık "haftalık görünüm + drag/drop (kısmi optimistic conflict)"
+  skor" ve "hafta/ay görünümü + drag/drop (kısmi optimistic conflict)"
   kısımları tamamlandı.
-- Takvimin sürükle-bırak etkileşimi için gerçek bir component/E2E testi yok
-  (yukarıdaki TEST RESULTS notuna bkz.) — sadece karar mantığı unit test ile
-  korunuyor.
+- ~~Takvimin sürükle-bırak etkileşimi için gerçek bir component/E2E testi
+  yok — sadece karar mantığı unit test ile korunuyor.~~ **[18.09.2026:
+  düzeltildi, yukarıya bkz.]**
 - ~~`recordLocation` parametre karışıklığı (yukarıda) düzeltilmeli.~~
   **[18.09.2026: düzeltildi.]**
 - ~~Dispatch skorlaması gerçek teknisyen konumunu kullanmıyor.~~
