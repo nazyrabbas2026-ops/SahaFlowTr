@@ -385,7 +385,7 @@ describe("auth, organization and tenant isolation", () => {
       })
       .expect(201);
 
-    await ownerA
+    const contact = await ownerA
       .post(
         `/api/v1/organizations/${organizationA}/customers/${customerA}/contacts`,
       )
@@ -430,6 +430,40 @@ describe("auth, organization and tenant isolation", () => {
       assets: [{ name: "Salon Kliması" }],
     });
     expect(detail.body.nationalIdCiphertext).toBeUndefined();
+
+    // Boş bırakılan iletişim alanı `null` olarak gelebilmeli ve mevcut bir
+    // değer `null` gönderilerek temizlenebilmeli; şema bir dönem ikisini de
+    // reddettiği için bir kişinin telefonunu silmenin yolu yoktu.
+    await ownerA
+      .post(
+        `/api/v1/organizations/${organizationA}/customers/${customerA}/contacts`,
+      )
+      .send({
+        name: "Telefonsuz Kişi",
+        phone: null,
+        email: "telefonsuz@example.com",
+        preferredChannel: "EMAIL",
+      })
+      .expect(201);
+    const cleared = await ownerA
+      .patch(
+        `/api/v1/organizations/${organizationA}/customers/${customerA}/contacts/${contact.body.id as string}`,
+      )
+      .send({
+        name: "Deniz Yılmaz",
+        phone: null,
+        email: "deniz@example.com",
+        preferredChannel: "EMAIL",
+      })
+      .expect(200);
+    expect(cleared.body.phone).toBeNull();
+    // Telefon ve e-postanın ikisi birden boş olamaz kuralı hâlâ geçerli.
+    await ownerA
+      .post(
+        `/api/v1/organizations/${organizationA}/customers/${customerA}/contacts`,
+      )
+      .send({ name: "Bilgisiz Kişi", phone: null, email: null })
+      .expect(400);
 
     await ownerA
       .patch(`/api/v1/organizations/${organizationA}/customers/${customerA}`)

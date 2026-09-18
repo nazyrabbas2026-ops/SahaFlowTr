@@ -717,3 +717,40 @@ döndü.
 - `customerFields` içinde kalan asimetri: `nationalId`, `taxNumber`,
   `taxOffice`, `notes` `null` kabul ederken iletişim alanları etmiyordu — bu
   dalda giderildi.
+
+## GÜNCELLEME: Şema nullable tutarlılığı (18.09.2026)
+
+`fix/schema-nullable-consistency` dalı, bir önceki güncellemede taranıp
+raporlanan iki latent kusuru kapattı.
+
+- `createContactSchema` (`updateContactSchema` olarak da kullanılıyor) artık
+  `phone` ve `email` için `customers.schemas.ts`'teki ortak
+  `clearablePhone`/`clearableEmail` tanımlarını kullanıyor. Önceden bu alanlar
+  `null`/`""` kabul etmediği için **mevcut bir iletişim kişisinin telefonunu
+  temizlemenin yolu yoktu** (alan atlanınca servis onu hiç güncellemiyordu).
+  "Telefon veya e-posta gereklidir" kuralı korunuyor: transform boş string'i
+  `null`'a çevirdiği için `refine` ikisi de boşken hâlâ reddediyor.
+- `createEmployeeSchema` (`employees.controller.ts`) içindeki `phone`,
+  `homeCity` ve `homeDistrict` artık `.nullable()`; `employees.service.ts`
+  `create()` girdi tipi de buna göre güncellendi. Employee için update
+  endpoint'i hâlâ yok, bu yüzden çift ayrışması riski bulunmuyor.
+- `optionalEmail` yardımcısı, yerini `clearableEmail` aldığı için kaldırıldı.
+
+### Kalıcı kural
+
+`.claude/skills/code-structure/SKILL.md` içine "Create/update şema çiftleri"
+bölümü eklendi: update, create'in taban nesnesinden `.partial()` ile türetilir
+ya da aynı nesne paylaşılır — ikisi bağımsız yazılmaz; temizlenebilir alanlar
+ortak `clearable*` tanımlarını kullanır ve boş string `null`'a normalize
+edilir. Gerekçe olarak bu oturumda yaşanan `customers` drift'i yazıldı.
+**Not**: `.claude/` dizini git'te izlenmiyor, bu kural yalnızca yerelde
+duruyor; ekiple paylaşılması isteniyorsa dizinin repoya eklenmesi gerekir.
+
+### TEST RESULTS (18.09.2026, gerçekten çalıştırıldı)
+
+- `pnpm db:generate` OK, `pnpm lint` temiz, `pnpm typecheck` 7/7,
+  `pnpm test` **50/50**, `pnpm build` 5/5, `pnpm test:e2e` **14/14**,
+  `pnpm test:smoke` **1/1**.
+- `auth.integration.test.ts`'e üç senaryo eklendi: telefonu boş (`null`)
+  iletişim kişisi oluşturma, mevcut bir kişinin telefonunu `null` ile
+  temizleme ve telefon+e-postanın ikisi birden boşken hâlâ 400 alınması.
