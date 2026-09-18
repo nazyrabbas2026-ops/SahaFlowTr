@@ -10,6 +10,20 @@ const optionalEmail = z
   .optional()
   .transform((value) => value || undefined);
 const phone = z.string().trim().min(7).max(30);
+// Boş bırakılan bir iletişim alanı için istemci `null` gönderir; create ve
+// update aynı girdiyi kabul etmezse form yalnızca düzenlemede çalışır. Boş
+// string de `null`'a normalize edilir, aksi hâlde "temizlendi" ile "boş metin
+// yazıldı" veritabanında iki ayrı duruma dönüşür.
+const emptyToNull = (value: string | null | undefined) =>
+  value === "" ? null : value;
+const clearablePhone = z
+  .union([phone, z.literal(""), z.null()])
+  .optional()
+  .transform(emptyToNull);
+const clearableEmail = z
+  .union([z.string().trim().email().max(254), z.literal(""), z.null()])
+  .optional()
+  .transform(emptyToNull);
 
 function validTckn(value: string) {
   if (!/^\d{11}$/.test(value) || value[0] === "0") return false;
@@ -24,9 +38,9 @@ function validTckn(value: string) {
 }
 
 const customerFields = {
-  primaryPhone: phone.optional(),
-  alternatePhone: phone.optional(),
-  email: optionalEmail,
+  primaryPhone: clearablePhone,
+  alternatePhone: clearablePhone,
+  email: clearableEmail,
   nationalId: z
     .union([
       z.string().trim().refine(validTckn, "Geçerli bir TCKN girin"),
@@ -73,11 +87,9 @@ export const updateCustomerSchema = z
     firstName: optionalText(80),
     lastName: optionalText(80),
     companyName: optionalText(160),
-    primaryPhone: z.union([phone, z.literal(""), z.null()]).optional(),
-    alternatePhone: z.union([phone, z.literal(""), z.null()]).optional(),
-    email: z
-      .union([z.string().trim().email().max(254), z.literal(""), z.null()])
-      .optional(),
+    primaryPhone: clearablePhone,
+    alternatePhone: clearablePhone,
+    email: clearableEmail,
     nationalId: z
       .union([
         z.string().trim().refine(validTckn, "Geçerli bir TCKN girin"),
