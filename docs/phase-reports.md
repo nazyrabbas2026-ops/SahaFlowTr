@@ -358,8 +358,12 @@ kapasite/seyahat, açıklanabilir skor ve provider map."
 - **Gün/hafta/ay takvim görünümü**: ~~YOK~~ **[18.09.2026: haftalık görünüm
   eklendi — `apps/web/components/dispatch-calendar.tsx`, 7 gün × teknisyen
   satırı, `GET /jobs?scheduledFrom=&scheduledTo=` ile o haftanın işlerini
-  çekiyor. Gün ve ay görünümü hâlâ yok — kapsam bilinçli olarak sadece
-  haftalığa daraltıldı.]**
+  çekiyor.]** **[18.09.2026, ikinci ekleme: ay görünümü de eklendi — aynı
+  teknisyen swimlane yapısı korunarak, `getMonthGrid()` ile hafta başlangıcına
+  hizalanmış 5-6 haftalık (35/42 gün) bir grid gösteriliyor; "Hafta/Ay" toggle
+  ile geçiliyor. Dar ay hücrelerinde işler sıkıştırılmıyor, ilk 2'si gösterilip
+  kalanı "+N daha" ile özetleniyor. Gün görünümü hâlâ yok — kapsam bilinçli
+  olarak hafta+ay ile sınırlı tutuldu.]**
 - **Drag/drop yeniden planlama**: ~~YOK~~ **[18.09.2026: eklendi —
   `@dnd-kit/core` ile aynı gün farklı teknisyene sürükleme
   `POST /jobs/:jobId/assign`'ı (dispatch'in kendi `assignJob`'ı değil,
@@ -404,9 +408,11 @@ kapasite/seyahat, açıklanabilir skor ve provider map."
 - `apps/api/src/dispatch/{dispatch.controller.ts,dispatch.module.ts,dispatch.service.ts}`
 - `packages/domain/src/dispatch.ts`
 - `apps/web/components/dispatch.tsx`
-- **[18.09.2026]** `apps/web/components/dispatch-calendar.tsx` (haftalık
-  takvim + sürükle-bırak), `dispatch-calendar.helpers.ts` (saf tarih/atama
-  mantığı), `dispatch-calendar.helpers.test.ts` (13 unit test).
+- **[18.09.2026]** `apps/web/components/dispatch-calendar.tsx` (haftalık +
+  aylık takvim, toggle, sürükle-bırak), `dispatch-calendar.helpers.ts` (saf
+  tarih/atama mantığı: `startOfWeek`/`startOfMonth`/`endOfMonth`/`addMonths`/
+  `getMonthGrid`/`resolveDropChanges`/`computeRescheduledRange`),
+  `dispatch-calendar.helpers.test.ts` (21 unit test).
 - **[18.09.2026]** `apps/api/src/jobs/jobs.schemas.ts`/`jobs.service.ts`:
   `GET /jobs` artık `scheduledFrom`/`scheduledTo` ile tarih aralığı
   filtreliyor (takvimin haftalık veri çekişi için).
@@ -422,7 +428,9 @@ kapasite/seyahat, açıklanabilir skor ve provider map."
 - Faz 5 ile aynı çalıştırma (17.09.2026): dispatch'e özel hiçbir
   unit/integration/E2E testi yok; `scoreCandidate`/`rankCandidates` de dahil
   hiçbir dispatch fonksiyonu test edilmiyor.
-- **[18.09.2026]** `dispatch-calendar.helpers.test.ts`: 13/13 geçti —
+- **[18.09.2026]** `dispatch-calendar.helpers.test.ts`: 21/21 geçti (ilk
+  eklemede 13, ay görünümüyle birlikte `startOfMonth`/`endOfMonth`/
+  `addMonths`/`getMonthGrid` için 8 test daha) —
   `startOfWeek`/`addDays`/`toDateKey` tarih hesapları ve
   `resolveDropChanges`/`computeRescheduledRange` sürükle-bırak karar mantığı
   kapsandı. Bu test yazılırken gerçek bir zaman dilimi hatası bulundu:
