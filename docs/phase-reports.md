@@ -257,10 +257,30 @@ gerçekten çalıştırıldı.
 
 ### KISMEN TAMAMLANMIŞ / BAŞLAMAMIŞ
 
-- **Recurring generation** ve **servis sözleşmesi/SLA** (Faz 5 kabul ölçütü
+- ~~**Recurring generation** ve **servis sözleşmesi/SLA** (Faz 5 kabul ölçütü
   ve ADR-007'de tanımlı): şemada karşılık gelen bir model
   (`ServiceAgreement`, tekrar şablonu, generation ledger) yok, servis
-  katmanında da hiçbir iz yok. Bu kapsam **hiç başlamadı**.
+  katmanında da hiçbir iz yok. Bu kapsam **hiç başlamadı**.~~ **[18.09.2026:
+  MVP eklendi — `ServiceAgreement` + `ServiceAgreementGenerationRun`
+  (`20260918105223_service_agreements` migration'ı) ve
+  `apps/api/src/service-agreements/` modülü (CRUD +
+  `POST :id/generate`). `generate()` `JobsService.create()`'i çağırıyor
+  (mantık tekrarlanmadı); üretim `(organizationId, serviceAgreementId,
+  periodKey)` üzerindeki `@@unique` kısıtı sayesinde idempotent —
+  aynı dönem için asla ikinci bir `Job` oluşmaz. Tekrar hesabı
+  `packages/domain/src/recurrence.ts`'te saf, unit test'li bir
+  fonksiyon (`computeDueOccurrences`).
+  **ADR-007'nin `JobTemplate`/`RecurrenceRule` ayrımı MVP'de bilinçli
+  olarak uygulanmadı** — şablon alanları (title/category/priority/
+  estimatedDurationMinutes) ve tekrar kuralı
+  (`recurrenceIntervalMonths`/`anchorDate`) doğrudan `ServiceAgreement`e
+  gömülü (bkz. şemadaki model üstü yorum). Bir şablonun birden fazla
+  sözleşme tarafından paylaşılması ihtiyacı doğduğunda ayrı bir
+  `JobTemplate` modeline çıkarılabilir.
+  **Hâlâ eksik**: BullMQ üzerinden otomatik/zamanlanmış üretim (şu an
+  sadece manuel `POST :id/generate`), haftalık/özel RRULE desteği (sadece
+  "her N ayda bir"), ziyaret kotası/SLA/dahil malzeme takibi, yenileme
+  akışı, `apps/worker`'a veritabanı erişimi.]**
 - **Geçiş testleri**: jobs modülüne özel hiçbir unit/integration testi yok.
   Tek ilgili test, `tests/e2e/foundation.spec.ts` içindeki "creates a job and
   opens its workflow history" — gerçek API'ye karşı değil, `page.route` ile
@@ -280,6 +300,9 @@ gerçekten çalıştırıldı.
 - `apps/api/src/employees/{employees.controller.ts,employees.module.ts,employees.service.ts}`
 - `packages/database/prisma/migrations/20260914125354_jobs`
 - `packages/domain/src/index.ts` (`JOB_*`, `EMPLOYEE_*` izinleri)
+- **[18.09.2026]** `apps/api/src/service-agreements/{service-agreements.controller.ts,service-agreements.module.ts,service-agreements.schemas.ts,service-agreements.service.ts}`,
+  `packages/domain/src/{recurrence.ts,recurrence.test.ts}`,
+  `packages/database/prisma/migrations/20260918105223_service_agreements`.
 
 ### DATABASE
 
@@ -293,6 +316,10 @@ gerçekten çalıştırıldı.
   `AutomationRule` tablolarını da önceden oluşturuyor; bu modüllerin
   hiçbirinde henüz service/controller/schema dosyası yok — şema ileri fazlar
   için önceden hazırlanmış, kod karşılığı henüz yazılmadı.
+- **[18.09.2026]** `ServiceAgreement`, `ServiceAgreementGenerationRun` —
+  `20260918105223_service_agreements` migration'ı; `plan_starter` planına
+  `operations.service-agreements` entitlement'ı ve "Şirket Sahibi" rolüne
+  `service-agreement.*` izinleri de aynı migration'la seed edildi.
 
 ### TEST RESULTS (17.09.2026, gerçekten çalıştırıldı)
 
@@ -320,7 +347,9 @@ gerçekten çalıştırıldı.
   lint/typecheck/test/build şu anda yeşil. Bkz. GÜNCELLEME bölümü.]**
 - Jobs/Employees modülleri için gerçek unit veya entegrasyon testi yok
   (dispatch skorlaması hariç — bkz. Faz 6 güncellemesi).
-- Recurring generation ve servis sözleşmesi/SLA kapsamı hiç başlamadı.
+- ~~Recurring generation ve servis sözleşmesi/SLA kapsamı hiç başlamadı.~~
+  **[18.09.2026: MVP eklendi, yukarıya bkz. — otomatik zamanlama,
+  RRULE, SLA/ziyaret kotası hâlâ eksik.]**
 
 ### NEXT PHASE
 

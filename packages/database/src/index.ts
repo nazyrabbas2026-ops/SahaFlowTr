@@ -1,1 +1,6 @@
-export { JobStatus, PrismaClient, Prisma } from "@prisma/client";
+export {
+  JobStatus,
+  ServiceAgreementGenerationStatus,
+  PrismaClient,
+  Prisma,
+} from "@prisma/client";

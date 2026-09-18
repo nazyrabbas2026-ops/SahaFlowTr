@@ -29,6 +29,9 @@ export const PERMISSIONS = {
   EMPLOYEE_MANAGE: "employee.manage",
   DISPATCH_READ: "dispatch.read",
   DISPATCH_ASSIGN: "dispatch.assign",
+  SERVICE_AGREEMENT_READ: "service-agreement.read",
+  SERVICE_AGREEMENT_MANAGE: "service-agreement.manage",
+  SERVICE_AGREEMENT_GENERATE: "service-agreement.generate",
 } as const;
 
 export const OWNER_PERMISSIONS = Object.values(PERMISSIONS);
@@ -36,6 +39,7 @@ export const OWNER_PERMISSIONS = Object.values(PERMISSIONS);
 export * from "./money";
 export * from "./geo";
 export * from "./dispatch";
+export * from "./recurrence";
 export interface Membership {
   userId: string;
   organizationId: string;
