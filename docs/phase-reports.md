@@ -743,8 +743,10 @@ bölümü eklendi: update, create'in taban nesnesinden `.partial()` ile türetil
 ya da aynı nesne paylaşılır — ikisi bağımsız yazılmaz; temizlenebilir alanlar
 ortak `clearable*` tanımlarını kullanır ve boş string `null`'a normalize
 edilir. Gerekçe olarak bu oturumda yaşanan `customers` drift'i yazıldı.
-**Not**: `.claude/` dizini git'te izlenmiyor, bu kural yalnızca yerelde
-duruyor; ekiple paylaşılması isteniyorsa dizinin repoya eklenmesi gerekir.
+~~**Not**: `.claude/` dizini git'te izlenmiyor, bu kural yalnızca yerelde
+duruyor; ekiple paylaşılması isteniyorsa dizinin repoya eklenmesi gerekir.~~
+**[18.09.2026: giderildi — `.claude/skills/` ve kök `AGENTS.md` artık sürüm
+kontrolünde, bkz. aşağıdaki güncelleme.]**
 
 ### TEST RESULTS (18.09.2026, gerçekten çalıştırıldı)
 
@@ -754,3 +756,30 @@ duruyor; ekiple paylaşılması isteniyorsa dizinin repoya eklenmesi gerekir.
 - `auth.integration.test.ts`'e üç senaryo eklendi: telefonu boş (`null`)
   iletişim kişisi oluşturma, mevcut bir kişinin telefonunu `null` ile
   temizleme ve telefon+e-postanın ikisi birden boşken hâlâ 400 alınması.
+
+## GÜNCELLEME: Geliştirme akışı repoya alındı (18.09.2026)
+
+`chore/track-claude-skills` dalı, o güne kadar yalnızca yerelde duran akış
+tanımını sürüm kontrolüne aldı: kök `AGENTS.md` ve
+`.claude/skills/{new-feature,code-structure,prove-it,ship-it}/SKILL.md`.
+`AGENTS.md` skill dosyalarına isimle atıf yaptığı için ikisi birlikte
+izlenmeli; yalnızca skill'leri eklemek, onları anlatan giriş belgesi olmadan
+yarım bir tanım bırakırdı.
+
+Böylece dört aşamalı akış (izole et → inşa et → kanıtla → gönder) ve
+`code-structure` içine eklenen create/update şema çifti kuralı artık repoyu
+klonlayan herkeste aynı; kurallar kişisel yapılandırmada saklı kalmıyor.
+
+`.gitignore`'a `.claude/settings.local.json` eklendi: bu dosya Claude Code'un
+makineye özel izin ayarlarını tutar ve paylaşılmamalıdır. Şu an `.claude/`
+altında başka makineye özel dosya yok; kural ileride oluşacağı için
+önleyici olarak konuldu. Eklenen dosyalar, paylaşıma açılmadan önce mutlak
+yol, kullanıcı adı ve sır içermediklerinden emin olmak için tarandı.
+
+### TEST RESULTS (18.09.2026, gerçekten çalıştırıldı)
+
+Kod değişikliği ve migration yok; yine de tam doğrulama çalıştırıldı ve
+hiçbir adımın bu dosyalardan etkilenmediği teyit edildi: `pnpm db:generate`
+OK, `pnpm lint` temiz (ESLint markdown dosyalarını zaten ele almıyor),
+`pnpm typecheck` 7/7, `pnpm test` 50/50, `pnpm build` 5/5, `pnpm test:e2e`
+14/14, `pnpm test:smoke` 1/1.
