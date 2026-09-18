@@ -1762,3 +1762,83 @@ th {
     gap: 15px;
   }
 }
+.week-calendar-card {
+  overflow-x: auto;
+}
+.week-calendar {
+  display: grid;
+  grid-template-columns: 150px repeat(7, minmax(140px, 1fr));
+  gap: 6px;
+  margin-top: 14px;
+}
+.week-calendar-row {
+  display: contents;
+}
+.week-calendar-day-head {
+  padding: 8px 10px;
+  text-align: center;
+}
+.week-calendar-day-head strong {
+  display: block;
+  font-size: 10px;
+}
+.week-calendar-day-head small {
+  color: var(--muted);
+  font-size: 8px;
+}
+.week-calendar-lane-label {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(127, 127, 127, 0.08);
+}
+.week-calendar-lane-label strong {
+  font-size: 10px;
+}
+.week-calendar-lane-label small {
+  color: var(--muted);
+  font-size: 8px;
+}
+.week-calendar-cell {
+  min-height: 56px;
+  padding: 5px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.week-calendar-cell.over {
+  border-color: #16b8a6;
+  background: rgba(22, 184, 166, 0.08);
+}
+.job-chip {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  padding: 6px 7px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 8.5px;
+  cursor: grab;
+  touch-action: none;
+}
+.job-chip strong {
+  display: block;
+  font-size: 9px;
+}
+.job-chip small {
+  display: block;
+  color: var(--muted);
+}
+.job-chip.dragging {
+  opacity: 0.5;
+}
+.week-calendar-note {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 9px;
+}

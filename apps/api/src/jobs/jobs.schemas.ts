@@ -22,6 +22,8 @@ export const jobListSchema = z.object({
     ])
     .default("ALL"),
   priority: z.enum(["ALL", "LOW", "NORMAL", "HIGH", "URGENT"]).default("ALL"),
+  scheduledFrom: z.string().datetime().optional(),
+  scheduledTo: z.string().datetime().optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });
