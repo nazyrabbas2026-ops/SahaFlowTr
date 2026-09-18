@@ -28,6 +28,7 @@ async function applyMigrations() {
     "202609140003_crm_customers",
     "20260914125354_jobs",
     "20260915122624_field_service_operations",
+    "20260918105223_service_agreements",
   ]) {
     const sql = await readFile(
       resolve(
@@ -487,5 +488,122 @@ describe("auth, organization and tenant isolation", () => {
         where: { organizationId: organizationA, entity: "Customer" },
       }),
     ).toBeGreaterThanOrEqual(4);
+  });
+
+  it("generates idempotent job occurrences from a recurring service agreement", async () => {
+    const owner = request.agent(app.getHttpServer());
+    const other = request.agent(app.getHttpServer());
+    const registration = await owner
+      .post("/api/v1/auth/register")
+      .set("X-Forwarded-For", "198.51.100.16")
+      .send({
+        name: "Sözleşme Sahibi",
+        email: "agreements-owner@example.com",
+        password: "GuvenliParola2032",
+        organizationName: "Sözleşme Organizasyonu",
+      })
+      .expect(201);
+    const otherRegistration = await other
+      .post("/api/v1/auth/register")
+      .set("X-Forwarded-For", "198.51.100.17")
+      .send({
+        name: "Başka Sahip",
+        email: "agreements-other@example.com",
+        password: "GuvenliParola2033",
+        organizationName: "Başka Sözleşme Organizasyonu",
+      })
+      .expect(201);
+    const organizationId = registration.body.organizations[0].id as string;
+    const otherOrganizationId = otherRegistration.body.organizations[0]
+      .id as string;
+
+    const customer = await owner
+      .post(`/api/v1/organizations/${organizationId}/customers`)
+      .send({
+        type: "INDIVIDUAL",
+        firstName: "Recep",
+        lastName: "Aydın",
+        primaryPhone: "+905551119900",
+        tags: [],
+      })
+      .expect(201);
+    const customerId = customer.body.id as string;
+
+    const created = await owner
+      .post(`/api/v1/organizations/${organizationId}/service-agreements`)
+      .send({
+        customerId,
+        title: "Aylık klima bakımı",
+        category: "Klima",
+        recurrenceIntervalMonths: 1,
+        anchorDate: "2026-01-15T09:00:00.000Z",
+        startDate: "2026-01-15T00:00:00.000Z",
+      })
+      .expect(201);
+    const agreementId = created.body.id as string;
+    expect(created.body.version).toBe(1);
+
+    await other
+      .get(`/api/v1/organizations/${organizationId}/service-agreements/${agreementId}`)
+      .expect(403);
+    await owner
+      .get(`/api/v1/organizations/${otherOrganizationId}/service-agreements/${agreementId}`)
+      .expect(403);
+
+    const firstGenerate = await owner
+      .post(
+        `/api/v1/organizations/${organizationId}/service-agreements/${agreementId}/generate`,
+      )
+      .send({ asOf: "2026-03-01T00:00:00.000Z" })
+      .expect(201);
+    expect(firstGenerate.body.periods).toHaveLength(2);
+    expect(
+      firstGenerate.body.periods.every(
+        (p: { status: string }) => p.status === "GENERATED",
+      ),
+    ).toBe(true);
+
+    // Aynı dönem aralığı için tekrar çağrılsa bile (idempotency) ikinci bir
+    // iş emri üretilmemeli; ledger zaten üretilmiş dönemleri döndürmeli.
+    const secondGenerate = await owner
+      .post(
+        `/api/v1/organizations/${organizationId}/service-agreements/${agreementId}/generate`,
+      )
+      .send({ asOf: "2026-03-01T00:00:00.000Z" })
+      .expect(201);
+    expect(
+      secondGenerate.body.periods.map(
+        (p: { jobId: string }) => p.jobId,
+      ),
+    ).toEqual(
+      firstGenerate.body.periods.map((p: { jobId: string }) => p.jobId),
+    );
+
+    const jobsList = await owner
+      .get(`/api/v1/organizations/${organizationId}/jobs`)
+      .query({ page: 1, pageSize: 10, status: "ALL", search: "" })
+      .expect(200);
+    expect(jobsList.body.pagination.total).toBe(2);
+
+    await owner
+      .patch(
+        `/api/v1/organizations/${organizationId}/service-agreements/${agreementId}`,
+      )
+      .send({ version: 1, title: "Güncellendi" })
+      .expect(200);
+    await owner
+      .patch(
+        `/api/v1/organizations/${organizationId}/service-agreements/${agreementId}`,
+      )
+      .send({ version: 1, title: "Eski sürüm" })
+      .expect(409);
+
+    const detail = await owner
+      .get(
+        `/api/v1/organizations/${organizationId}/service-agreements/${agreementId}`,
+      )
+      .expect(200);
+    expect(detail.body.title).toBe("Güncellendi");
+    expect(detail.body.generationRuns).toHaveLength(2);
   });
 });

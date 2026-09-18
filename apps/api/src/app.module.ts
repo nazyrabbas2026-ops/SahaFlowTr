@@ -10,6 +10,7 @@ import { TrustedOriginGuard } from "./common/trusted-origin.guard";
 import { JobsModule } from "./jobs/jobs.module";
 import { EmployeesModule } from "./employees/employees.module";
 import { DispatchModule } from "./dispatch/dispatch.module";
+import { ServiceAgreementsModule } from "./service-agreements/service-agreements.module";
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { DispatchModule } from "./dispatch/dispatch.module";
     JobsModule,
     EmployeesModule,
     DispatchModule,
+    ServiceAgreementsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
