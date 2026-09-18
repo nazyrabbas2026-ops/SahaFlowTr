@@ -44,6 +44,12 @@ Web: http://localhost:3000 · API: http://localhost:4000/api/v1/health · OpenAP
 
 `/api/v1/health` process liveness; `/api/v1/health/ready` PostgreSQL, Redis ve bucket erişimini doğrular ve eksik serviste 503 döner. Web `/api/health` backend readiness proxy'sidir.
 
+## Geliştirme akışı
+
+Bu projede geliştirme akışı repoda tanımlıdır: [AGENTS.md](AGENTS.md) dört aşamayı (izole et → inşa et → kanıtla → gönder) anlatır, her aşamanın kuralları `.claude/skills/<isim>/SKILL.md` altında durur. Dosyalar sürüm kontrolünde olduğu için repoyu klonlayan herkes — ve Claude Code gibi bu dosyaları okuyan araçlar — aynı akışı alır; kurallar kişisel yapılandırmada saklı kalmaz.
+
+Tek istisna `.gitignore`'daki `.claude/settings.local.json`'dır: bu dosya Claude Code'un makineye özel izin ayarlarını tutar, paylaşılmaz.
+
 ## Kalite kontrolleri
 
 ```powershell

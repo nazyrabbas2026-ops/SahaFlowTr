@@ -10,3 +10,4 @@ test-results/
 .local/
 .codex-*.log
 .next-smoke/
+.claude/settings.local.json
