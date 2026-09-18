@@ -64,9 +64,9 @@ export class EmployeesService {
     input: {
       employeeNumber: string;
       title: string;
-      phone?: string;
-      homeCity?: string;
-      homeDistrict?: string;
+      phone?: string | null;
+      homeCity?: string | null;
+      homeDistrict?: string | null;
     },
   ) {
     return this.db.employeeProfile.create({

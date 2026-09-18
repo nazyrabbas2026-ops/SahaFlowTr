@@ -23,9 +23,9 @@ const createEmployeeSchema = z.object({
   memberId: z.string().cuid(),
   employeeNumber: z.string().min(1).max(50),
   title: z.string().min(1).max(100),
-  phone: z.string().max(20).optional(),
-  homeCity: z.string().max(100).optional(),
-  homeDistrict: z.string().max(100).optional(),
+  phone: z.string().max(20).nullable().optional(),
+  homeCity: z.string().max(100).nullable().optional(),
+  homeDistrict: z.string().max(100).nullable().optional(),
 });
 
 const addSkillSchema = z.object({

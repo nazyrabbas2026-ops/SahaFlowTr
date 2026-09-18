@@ -5,10 +5,6 @@ const optionalText = (max: number) =>
     .union([z.string().trim().max(max), z.null()])
     .optional()
     .transform((value) => (value === "" ? undefined : value));
-const optionalEmail = z
-  .union([z.string().trim().email().max(254), z.literal("")])
-  .optional()
-  .transform((value) => value || undefined);
 const phone = z.string().trim().min(7).max(30);
 // Boş bırakılan bir iletişim alanı için istemci `null` gönderir; create ve
 // update aynı girdiyi kabul etmezse form yalnızca düzenlemede çalışır. Boş
@@ -125,8 +121,8 @@ export const createContactSchema = z
   .object({
     name: z.string().trim().min(2).max(120),
     role: optionalText(100),
-    phone: phone.optional(),
-    email: optionalEmail,
+    phone: clearablePhone,
+    email: clearableEmail,
     preferredChannel: z
       .enum(["PHONE", "EMAIL", "SMS", "WHATSAPP"])
       .default("PHONE"),
