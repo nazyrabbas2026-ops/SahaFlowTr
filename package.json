@@ -16,7 +16,8 @@
     "db:generate": "pnpm --filter @sahaflow/database generate",
     "db:migrate": "pnpm --filter @sahaflow/database migrate",
     "format": "prettier --write .",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:smoke": "playwright test --config=playwright.smoke.config.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",

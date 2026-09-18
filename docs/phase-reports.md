@@ -644,3 +644,76 @@ mevcut alt-kayıt desenini (liste + oluştur/düzenle modalı) tekrar kullanıyo
   tek başına 3 kez tekrarlandığında 9/9 geçti ve tam suite tekrar çalışınca
   14/14 yeşil oldu. Bu dalın değişiklikleriyle ilgisi yok, ama takvim testi
   kararlılık açısından izlenmeli.
+
+## GÜNCELLEME: Müşteri oluşturma düzeltmesi ve gerçek-stack smoke paketi (18.09.2026)
+
+`fix/customer-create-nullable-fields` dalı, servis sözleşmeleri arayüzü
+çalışılırken bulunan Faz 4 (CRM) hatasını düzeltti ve onu yakalayamayan test
+boşluğunu kapattı.
+
+### Düzeltilen hata
+
+`createCustomerSchema` içindeki `primaryPhone`/`alternatePhone`
+(`phone.optional()`) ve `email` (`optionalEmail`) alanları `null` kabul
+etmiyordu; `apps/web/components/customers.tsx` ise boş bırakılan alanları
+`null` gönderiyor. Sonuç: bu alanlardan biri boş bırakıldığında **gerçek
+API'ye karşı müşteri oluşturma 400 dönüyordu**. `updateCustomerSchema` aynı
+alanlarda `null`'a izin verdiği için yalnızca düzenleme çalışıyordu. Üç alan
+artık create ve update tarafından **ortak** `clearablePhone`/`clearableEmail`
+tanımlarını kullanıyor, böylece iki şema yeniden ayrışamaz; boş string de
+`null`'a normalize ediliyor.
+
+### Neden mock'lu E2E bunu göremedi
+
+`tests/e2e/foundation.spec.ts`'teki "creates a customer" senaryosu POST
+yanıtını `page.route` ile tamamen mock'luyor: form ne gönderirse göndersin
+test 201 alıyor. Yani mock'lu paket, tarayıcının gönderdiği gövde ile Zod
+şemasının kabul ettiği gövde arasındaki ayrışmayı **yapısal olarak**
+göremez.
+
+### Eklenen gerçek-stack smoke paketi
+
+`pnpm test:smoke` (`playwright.smoke.config.ts`, `tests/smoke/`): hiçbir mock
+kullanmaz; kendi geçici PostgreSQL'ini kurar, migration klasörünü **sırayla
+okuyup** uygular (sabit liste tutulmaz — entegrasyon testinde bu daha önce
+geride kalmıştı), gerçek API'yi (4100) ve web'in kendi production build'ini
+(3200, ayrı `.next-smoke` çıktısı) başlatır, senaryo bitince veritabanını
+siler. Senaryo: kayıt → **telefon/e-posta boş** müşteri → iş emri → listede
+görme; ayrıca 4xx dönen her `/api/v1/` çağrısını hata sayar.
+
+Ayrı bir config olmasının nedeni: `next dev` aynı proje dizini için ikinci
+bir örneğe izin vermiyor, bu yüzden smoke paketi production build'i ayrı bir
+çıktı klasöründen servis ediyor; geliştiricinin çalışan `pnpm dev` sunucusu
+etkilenmiyor. Paket şu an CI'da çalışmıyor.
+
+**Testin gerçekten koruduğu doğrulandı**: düzeltme geçici olarak geri alınıp
+smoke paketi çalıştırıldı ve kırmızı oldu; düzeltme geri konunca yeşile
+döndü.
+
+### TEST RESULTS (18.09.2026, gerçekten çalıştırıldı)
+
+- `pnpm db:generate` OK, `pnpm lint` temiz, `pnpm typecheck` 7/7,
+  `pnpm test` **50/50**, `pnpm build` 5/5, `pnpm test:e2e` **14/14**
+  (mock'lu paket etkilenmedi), `pnpm test:smoke` **1/1**.
+- `auth.integration.test.ts` içine, boş iletişim alanlarıyla müşteri
+  oluşturmayı API seviyesinde kilitleyen bir senaryo eklendi.
+
+### Taranan diğer create/update şema çiftleri (düzeltilmedi, rapor edildi)
+
+- **Yapısal gözlem**: `jobs` ve `service-agreements` şemalarında update,
+  create'in taban nesnesinden `.partial()` ile türetiliyor; `address` ve
+  `asset` ise create/update için aynı nesneyi paylaşıyor. Yani bu çiftler
+  **tanımı gereği** ayrışamaz. `customers` ise create ve update şemalarının
+  birbirinden bağımsız yazıldığı tek yerdi — drift tam olarak orada oluştu.
+- `createContactSchema` (aynı nesne `updateContactSchema` olarak da
+  kullanılıyor): `phone` `null`/`""` kabul etmiyor, `email` `null` kabul
+  etmiyor. Create/update çifti ayrışması yok ve web formu boş alanlar için
+  `undefined` gönderdiğinden bugün kırık değil; ancak mevcut bir kişinin
+  telefonunu **temizlemenin yolu yok** (alan atlanınca servis onu
+  güncellemiyor). Latent kusur.
+- `employees.controller.ts` içindeki `createEmployeeSchema`: `phone`,
+  `homeCity`, `homeDistrict` `.optional()` ama `.nullable()` değil. Employee
+  için update endpoint'i hiç olmadığından çift ayrışması yok; latent.
+- `customerFields` içinde kalan asimetri: `nationalId`, `taxNumber`,
+  `taxOffice`, `notes` `null` kabul ederken iletişim alanları etmiyordu — bu
+  dalda giderildi.
