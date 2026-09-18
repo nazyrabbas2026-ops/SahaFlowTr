@@ -1,5 +1,12 @@
 "use client";
-import { ChevronRight, MapPin, Plus, Sparkles, UserRound, X } from "lucide-react";
+import {
+  ChevronRight,
+  MapPin,
+  Plus,
+  Sparkles,
+  UserRound,
+  X,
+} from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { PanelState, StatusBadge } from "./design-system";
 
@@ -15,6 +22,51 @@ type Employee = {
   member: { id: string; user: { name: string; email: string } };
   skills: Array<{ skillId: string; level: number; skill: Skill }>;
 };
+type WorkScheduleEntry = {
+  id: string;
+  weekday: number;
+  startsAt: string;
+  endsAt: string;
+};
+type TimeEntryItem = {
+  id: string;
+  kind: "WORK" | "TRAVEL" | "BREAK" | "ON_CALL";
+  startsAt: string;
+  endsAt: string | null;
+  minutes: number;
+  billable: boolean;
+  note: string | null;
+  job: { jobNumber: string; title: string } | null;
+};
+type EmployeeDetail = Employee & {
+  serviceMode: "FIELD" | "WORKSHOP" | "REMOTE";
+  workLatencyMinutes: number;
+  overtimeMultiplierBps: number;
+  active: boolean;
+  createdAt: string;
+  workSchedule: WorkScheduleEntry[];
+  timeEntries: TimeEntryItem[];
+};
+const serviceModeLabels: Record<EmployeeDetail["serviceMode"], string> = {
+  FIELD: "Saha",
+  WORKSHOP: "Atölye",
+  REMOTE: "Uzaktan",
+};
+const timeEntryKindLabels: Record<TimeEntryItem["kind"], string> = {
+  WORK: "Çalışma",
+  TRAVEL: "Seyahat",
+  BREAK: "Mola",
+  ON_CALL: "Nöbet",
+};
+const weekdayLabels = [
+  "Pazar",
+  "Pazartesi",
+  "Salı",
+  "Çarşamba",
+  "Perşembe",
+  "Cuma",
+  "Cumartesi",
+];
 type Member = { id: string; user: { name: string }; role: { name: string } };
 type Job = {
   id: string;
@@ -68,6 +120,11 @@ export function Dispatch({
     "idle" | "loading" | "error"
   >("idle");
   const [assignBusy, setAssignBusy] = useState("");
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<EmployeeDetail | null>(null);
+  const [detailState, setDetailState] = useState<
+    "loading" | "idle" | "error"
+  >("idle");
 
   const load = useCallback(async () => {
     setState("loading");
@@ -162,6 +219,21 @@ export function Dispatch({
     }
   }
 
+  async function openDetail(employeeId: string) {
+    setDetailId(employeeId);
+    setDetailState("loading");
+    try {
+      const data = await json<EmployeeDetail>(
+        `/api/v1/organizations/${organizationId}/employees/${employeeId}`,
+      );
+      setDetail(data);
+      setDetailState("idle");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Çalışan detayı alınamadı");
+      setDetailState("error");
+    }
+  }
+
   async function loadCandidates(jobId: string) {
     setSelectedJobId(jobId);
     if (!jobId) {
@@ -247,6 +319,7 @@ export function Dispatch({
                     <th>Bölge</th>
                     <th>Beceriler</th>
                     <th>Beceri ata</th>
+                    <th />
                   </tr>
                 </thead>
                 <tbody>
@@ -287,6 +360,14 @@ export function Dispatch({
                             </option>
                           ))}
                         </select>
+                      </td>
+                      <td>
+                        <button
+                          className="row-action"
+                          onClick={() => void openDetail(emp.id)}
+                        >
+                          Detay <ChevronRight size={14} />
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -460,6 +541,128 @@ export function Dispatch({
                 <button className="primary">Kaydet</button>
               </div>
             </form>
+          </section>
+        </div>
+      )}
+
+      {detailId && (
+        <div
+          className="dialog-backdrop"
+          onMouseDown={() => {
+            setDetailId(null);
+            setDetail(null);
+          }}
+        >
+          <section
+            className="entity-modal"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div className="popover-title">
+              <strong>Çalışan detayı</strong>
+              <button
+                onClick={() => {
+                  setDetailId(null);
+                  setDetail(null);
+                }}
+              >
+                <X />
+              </button>
+            </div>
+            {detailState === "loading" && (
+              <PanelState kind="loading">Çalışan detayı yükleniyor…</PanelState>
+            )}
+            {detailState === "error" && (
+              <PanelState kind="error">Çalışan detayı alınamadı.</PanelState>
+            )}
+            {detailState === "idle" && detail && (
+              <div className="entity-form">
+                <div className="section-title">
+                  <div>
+                    <strong>{detail.member.user.name}</strong>
+                    <small>
+                      {detail.title} · {detail.employeeNumber}
+                    </small>
+                  </div>
+                  <StatusBadge tone={detail.active ? "success" : "neutral"}>
+                    {detail.active ? "Aktif" : "Pasif"}
+                  </StatusBadge>
+                </div>
+                <p>
+                  {detail.member.user.email}
+                  {detail.phone ? ` · ${detail.phone}` : ""}
+                </p>
+                <p>
+                  {serviceModeLabels[detail.serviceMode]} ·{" "}
+                  {[detail.homeDistrict, detail.homeCity]
+                    .filter(Boolean)
+                    .join(", ") || "Bölge belirtilmemiş"}{" "}
+                  · Ulaşım süresi {detail.workLatencyMinutes} dk
+                </p>
+
+                <div className="section-title" style={{ marginTop: 16 }}>
+                  <h3>Beceriler</h3>
+                </div>
+                {detail.skills.length ? (
+                  <p>
+                    {detail.skills
+                      .map((s) => `${s.skill.name} (${s.level})`)
+                      .join(", ")}
+                  </p>
+                ) : (
+                  <PanelState kind="empty">Beceri atanmamış.</PanelState>
+                )}
+
+                <div className="section-title" style={{ marginTop: 16 }}>
+                  <h3>Çalışma programı</h3>
+                </div>
+                {detail.workSchedule.length ? (
+                  <ul>
+                    {detail.workSchedule.map((entry) => (
+                      <li key={entry.id}>
+                        {weekdayLabels[entry.weekday] ?? entry.weekday}{" "}
+                        {new Date(entry.startsAt).toLocaleTimeString("tr-TR", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                        {" – "}
+                        {new Date(entry.endsAt).toLocaleTimeString("tr-TR", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <PanelState kind="empty">
+                    Çalışma programı tanımlanmamış.
+                  </PanelState>
+                )}
+
+                <div className="section-title" style={{ marginTop: 16 }}>
+                  <h3>Son zaman kayıtları</h3>
+                </div>
+                {detail.timeEntries.length ? (
+                  <ul>
+                    {detail.timeEntries.map((entry) => (
+                      <li key={entry.id}>
+                        {timeEntryKindLabels[entry.kind]} ·{" "}
+                        {new Date(entry.startsAt).toLocaleString("tr-TR")}
+                        {" · "}
+                        {entry.minutes} dk
+                        {entry.job
+                          ? ` · ${entry.job.jobNumber} ${entry.job.title}`
+                          : ""}
+                        {entry.note ? ` · ${entry.note}` : ""}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <PanelState kind="empty">
+                    Zaman kaydı bulunmuyor.
+                  </PanelState>
+                )}
+              </div>
+            )}
           </section>
         </div>
       )}

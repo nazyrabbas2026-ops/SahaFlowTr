@@ -265,8 +265,12 @@ gerçekten çalıştırıldı.
   Tek ilgili test, `tests/e2e/foundation.spec.ts` içindeki "creates a job and
   opens its workflow history" — gerçek API'ye karşı değil, `page.route` ile
   mock'lanmış bir Playwright senaryosu.
-- `WorkSchedule` ve `TimeEntry` modelleri şemada var ama hiçbir
-  service/controller onları kullanmıyor; sadece şema iskeleti.
+- ~~`WorkSchedule` ve `TimeEntry` modelleri şemada var ama hiçbir
+  service/controller onları kullanmıyor; sadece şema iskeleti.~~
+  **[18.09.2026: kısmen düzeltildi — `employees.service.ts getById()` artık
+  ikisini de `memberId` üzerinden okuyup `GET /employees/:employeeId`
+  yanıtına ekliyor (bkz. `feature/employee-detail-view`). Sadece okuma; bu
+  kayıtları oluşturan/güncelleyen bir endpoint hâlâ yok.]**
 - `employees` modülünde diğer modüllerdeki `*.schemas.ts` konvansiyonu yok;
   Zod şemaları doğrudan `employees.controller.ts` içinde tanımlı.
 
