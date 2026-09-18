@@ -8,6 +8,7 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { DispatchCalendar } from "./dispatch-calendar";
 import { PanelState, StatusBadge } from "./design-system";
 
 type Skill = { id: string; key: string; name: string; category: string };
@@ -275,6 +276,8 @@ export function Dispatch({
   }
 
   return (
+    <>
+    <DispatchCalendar organizationId={organizationId} permissions={permissions} />
     <section className="content-card table-card">
       <div className="section-title customer-title">
         <div>
@@ -667,5 +670,6 @@ export function Dispatch({
         </div>
       )}
     </section>
+    </>
   );
 }

@@ -355,13 +355,24 @@ Faz 6 kabul ölçütü: "Gün/hafta/ay, drag/drop, optimistic conflict,
 kapasite/seyahat, açıklanabilir skor ve provider map."
 
 - **Açıklanabilir skor**: VAR.
-- **Gün/hafta/ay takvim görünümü**: YOK — ne API'de ne web'de bir
-  takvim/zaman çizelgesi uç noktası veya bileşeni bulunamadı.
-- **Drag/drop yeniden planlama**: YOK.
-- **Optimistic conflict**: Job güncellemesinde genel bir `version` alanı var
-  (Faz 5), ama dispatch'e özgü bir conflict senaryosu ele alınmıyor;
-  `dispatch.service.ts assignJob()` versiyon kontrolü yapmadan doğrudan
-  `jobAssignment.create` çağırıyor.
+- **Gün/hafta/ay takvim görünümü**: ~~YOK~~ **[18.09.2026: haftalık görünüm
+  eklendi — `apps/web/components/dispatch-calendar.tsx`, 7 gün × teknisyen
+  satırı, `GET /jobs?scheduledFrom=&scheduledTo=` ile o haftanın işlerini
+  çekiyor. Gün ve ay görünümü hâlâ yok — kapsam bilinçli olarak sadece
+  haftalığa daraltıldı.]**
+- **Drag/drop yeniden planlama**: ~~YOK~~ **[18.09.2026: eklendi —
+  `@dnd-kit/core` ile aynı gün farklı teknisyene sürükleme
+  `POST /jobs/:jobId/assign`'ı (dispatch'in kendi `assignJob`'ı değil,
+  `jobs.service.ts`'nin doğru unassign/audit içeren `assign()`'ı) çağırıyor;
+  farklı güne sürükleme `PATCH /jobs/:jobId`'yi süre korunarak yeni
+  `scheduledStart`/`scheduledEnd` ve `version` ile çağırıyor.]**
+- **Optimistic conflict**: Kısmi — takvimden sürükleyerek yeniden planlama
+  `PATCH /jobs/:jobId`'nin mevcut `version` kontrolünü kullanıyor; 409
+  dönerse takvim hatayı gösterip veriyi yeniden yüklüyor **[18.09.2026]**.
+  Ancak `dispatch.service.ts assignJob()` (aday önerisi ekranındaki "Ata"
+  butonu) hâlâ versiyon kontrolü yapmadan doğrudan `jobAssignment.create`
+  çağırıyor — bu yol düzeltilmedi, sadece takvimin kendi sürükle-bırak yolu
+  doğru (`jobs.service.ts`'nin `assign()`'ı) endpoint'i kullanıyor.
 - **Kapasite/seyahat**: Kısmi — `distanceScore` düz coğrafi (Öklid benzeri)
   bir yaklaşım, gerçek seyahat süresi/trafik hesaplamıyor. ~~Ayrıca
   `dispatch.service.ts suggestCandidates()` içinde aday koordinatları hep
@@ -393,6 +404,12 @@ kapasite/seyahat, açıklanabilir skor ve provider map."
 - `apps/api/src/dispatch/{dispatch.controller.ts,dispatch.module.ts,dispatch.service.ts}`
 - `packages/domain/src/dispatch.ts`
 - `apps/web/components/dispatch.tsx`
+- **[18.09.2026]** `apps/web/components/dispatch-calendar.tsx` (haftalık
+  takvim + sürükle-bırak), `dispatch-calendar.helpers.ts` (saf tarih/atama
+  mantığı), `dispatch-calendar.helpers.test.ts` (13 unit test).
+- **[18.09.2026]** `apps/api/src/jobs/jobs.schemas.ts`/`jobs.service.ts`:
+  `GET /jobs` artık `scheduledFrom`/`scheduledTo` ile tarih aralığı
+  filtreliyor (takvimin haftalık veri çekişi için).
 
 ### DATABASE
 
@@ -405,12 +422,27 @@ kapasite/seyahat, açıklanabilir skor ve provider map."
 - Faz 5 ile aynı çalıştırma (17.09.2026): dispatch'e özel hiçbir
   unit/integration/E2E testi yok; `scoreCandidate`/`rankCandidates` de dahil
   hiçbir dispatch fonksiyonu test edilmiyor.
+- **[18.09.2026]** `dispatch-calendar.helpers.test.ts`: 13/13 geçti —
+  `startOfWeek`/`addDays`/`toDateKey` tarih hesapları ve
+  `resolveDropChanges`/`computeRescheduledRange` sürükle-bırak karar mantığı
+  kapsandı. Bu test yazılırken gerçek bir zaman dilimi hatası bulundu:
+  `toDateKey` UTC, `startOfWeek`/`addDays` yerel saat kullanıyordu; bu
+  karışım pozitif UTC ofsetli saat dilimlerinde (Türkiye dahil) takvim
+  gününü bir gün geri kaydırıyordu. Tüm yardımcı fonksiyonlar yerel-saat
+  tutarlı hale getirilerek düzeltildi. Takvim bileşeninin kendisi (React
+  render + gerçek sürükleme etkileşimi) için ayrı bir component/E2E testi
+  yazılmadı — proje E2E'de `page.route` mock'ları kullanıyor ve gerçek
+  dnd-kit pointer sürüklemesini simüle etmiyor; bu bir sonraki iyileştirme.
 
 ### KNOWN ISSUES
 
-- Takvim/drag-drop/optimistic-conflict/provider map hiç başlamadı; Faz 6
-  kabul ölçütünün yalnızca "aday önerisi + atama" ve "açıklanabilir skor"
+- Ay görünümü, gerçek kapasite/seyahat süresi hesaplaması ve provider map
+  hâlâ yok; Faz 6 kabul ölçütünün "aday önerisi + atama", "açıklanabilir
+  skor" ve artık "haftalık görünüm + drag/drop (kısmi optimistic conflict)"
   kısımları tamamlandı.
+- Takvimin sürükle-bırak etkileşimi için gerçek bir component/E2E testi yok
+  (yukarıdaki TEST RESULTS notuna bkz.) — sadece karar mantığı unit test ile
+  korunuyor.
 - ~~`recordLocation` parametre karışıklığı (yukarıda) düzeltilmeli.~~
   **[18.09.2026: düzeltildi.]**
 - ~~Dispatch skorlaması gerçek teknisyen konumunu kullanmıyor.~~

@@ -74,6 +74,18 @@ export class JobsService {
       organizationId: org,
       ...(input.status !== "ALL" ? { status: input.status } : {}),
       ...(input.priority !== "ALL" ? { priority: input.priority } : {}),
+      ...(input.scheduledFrom || input.scheduledTo
+        ? {
+            scheduledStart: {
+              ...(input.scheduledFrom
+                ? { gte: new Date(input.scheduledFrom) }
+                : {}),
+              ...(input.scheduledTo
+                ? { lte: new Date(input.scheduledTo) }
+                : {}),
+            },
+          }
+        : {}),
       ...(input.search
         ? {
             OR: [
