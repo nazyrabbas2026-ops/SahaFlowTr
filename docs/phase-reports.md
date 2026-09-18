@@ -294,7 +294,8 @@ gerçekten çalıştırıldı.
 
 - `pnpm lint`: **BAŞARISIZ** — `packages/database/peek.mjs:13` içinde
   önceden var olan `no-undef` (`console`) hatası. Bu dosya bu faz kapsamında
-  eklenmedi, ama `main` üzerinde lint şu anda kırmızı.
+  eklenmedi, ama `main` üzerinde lint şu anda kırmızı. **[18.09.2026:
+  düzeltildi, bkz. GÜNCELLEME bölümü.]**
 - `pnpm typecheck`: 7/7 Turbo görevi geçti.
 - `pnpm test` (Vitest): 9 testten 8'i geçti, 1'i başarısız —
   `apps/api/test/auth.integration.test.ts` içindeki `applyMigrations()`
@@ -302,16 +303,19 @@ gerçekten çalıştırıldı.
   migration'ını içermiyor; test veritabanında `CustomerAddress.latitude`
   kolonu oluşmuyor ve müşteri adresi oluşturma senaryosu `500 (P2022)` ile
   başarısız oluyor. Bu, Faz 6 migration'ı eklenirken entegrasyon testi
-  harness'inin güncellenmediğini gösteriyor.
+  harness'inin güncellenmediğini gösteriyor. **[18.09.2026: düzeltildi, bkz.
+  GÜNCELLEME bölümü.]**
 - `pnpm build` ve `pnpm test:e2e` bu tur çalıştırılmadı (kapsam dokümantasyon
   güncellemesiydi, kod değişmedi); yukarıdaki `lint`/`test` başarısızlıkları
   zaten gate'i açık tutuyor.
 
 ### KNOWN ISSUES
 
-- CI şu anda `main` üzerinde kırmızı: hem `pnpm lint` hem `pnpm test`
-  başarısız.
-- Jobs/Employees modülleri için gerçek unit veya entegrasyon testi yok.
+- ~~CI şu anda `main` üzerinde kırmızı: hem `pnpm lint` hem `pnpm test`
+  başarısız.~~ **[18.09.2026: düzeltildi ve main'e merge edildi — main'de
+  lint/typecheck/test/build şu anda yeşil. Bkz. GÜNCELLEME bölümü.]**
+- Jobs/Employees modülleri için gerçek unit veya entegrasyon testi yok
+  (dispatch skorlaması hariç — bkz. Faz 6 güncellemesi).
 - Recurring generation ve servis sözleşmesi/SLA kapsamı hiç başlamadı.
 
 ### NEXT PHASE
@@ -355,21 +359,28 @@ kapasite/seyahat, açıklanabilir skor ve provider map."
   `dispatch.service.ts assignJob()` versiyon kontrolü yapmadan doğrudan
   `jobAssignment.create` çağırıyor.
 - **Kapasite/seyahat**: Kısmi — `distanceScore` düz coğrafi (Öklid benzeri)
-  bir yaklaşım, gerçek seyahat süresi/trafik hesaplamıyor. Ayrıca
+  bir yaklaşım, gerçek seyahat süresi/trafik hesaplamıyor. ~~Ayrıca
   `dispatch.service.ts suggestCandidates()` içinde aday koordinatları hep
   `latitude: undefined, longitude: undefined` olarak gönderiliyor —
   `TechnicianLocation` tablosundan gerçek konum hiç okunmuyor, yani mesafe
-  skoru pratikte her zaman varsayılan (50) dönüyor.
+  skoru pratikte her zaman varsayılan (50) dönüyor.~~ **[18.09.2026:
+  koordinat okuma düzeltildi — `suggestCandidates()` artık her adayın son
+  `TechnicianLocation` kaydını okuyup skora yansıtıyor (regresyon testi:
+  `dispatch.service.test.ts`). Gerçek seyahat süresi/trafik hesaplaması hâlâ
+  yok, bu kısım kabul ölçütünün karşılanmayan tarafı olarak kalıyor.]**
 - **Provider map**: YOK — hiçbir harita sağlayıcı entegrasyonu yok (bkz.
   `docs/implementation-plan.md` riskler: "Harita/ödeme/e-belge credential
   yok").
-- **Ek bulgu (veri bütünlüğü)**: `employees.controller.ts recordLocation()`
+- ~~**Ek bulgu (veri bütünlüğü)**: `employees.controller.ts recordLocation()`
   route parametresi olan `employeeId`'yi (`EmployeeProfile.id`) doğrudan
   `employees.service.ts recordLocation()`'ın beklediği `memberId`
   (`OrganizationMember.id`) parametresine geçiriyor; bu iki alan farklı
   olduğundan `TechnicianLocation.memberId` yanlış değerle kaydedilebilir. Bu
   veri şu an dispatch skorlamasında okunmadığı için sonucu etkilemiyor ama
-  düzeltilmesi gerekiyor.
+  düzeltilmesi gerekiyor.~~ **[18.09.2026: düzeltildi —
+  `recordLocation`/`getRecentLocation` artık `employeeId`'yi `EmployeeProfile`
+  üzerinden gerçek `memberId`'ye çözüyor; `dispatch.service.ts` de artık
+  `TechnicianLocation`'dan gerçek konumu okuyor. Bkz. GÜNCELLEME bölümü.]**
 - `dispatch` modülünde de `employees` gibi ayrı bir `*.schemas.ts` dosyası
   yok; Zod şeması controller içinde.
 
@@ -396,16 +407,48 @@ kapasite/seyahat, açıklanabilir skor ve provider map."
 - Takvim/drag-drop/optimistic-conflict/provider map hiç başlamadı; Faz 6
   kabul ölçütünün yalnızca "aday önerisi + atama" ve "açıklanabilir skor"
   kısımları tamamlandı.
-- `recordLocation` parametre karışıklığı (yukarıda) düzeltilmeli.
-- Dispatch skorlaması gerçek teknisyen konumunu kullanmıyor.
-- Faz 5'teki lint/test kırmızı durumu Faz 6'yı da kapsıyor (aynı `pnpm
-  test`/`pnpm lint` çalıştırması).
+- ~~`recordLocation` parametre karışıklığı (yukarıda) düzeltilmeli.~~
+  **[18.09.2026: düzeltildi.]**
+- ~~Dispatch skorlaması gerçek teknisyen konumunu kullanmıyor.~~
+  **[18.09.2026: düzeltildi, regresyon testiyle korunuyor.]**
+- ~~Faz 5'teki lint/test kırmızı durumu Faz 6'yı da kapsıyor (aynı `pnpm
+  test`/`pnpm lint` çalıştırması).~~ **[18.09.2026: düzeltildi, bkz.
+  GÜNCELLEME bölümü.]**
 
 ### NEXT PHASE
 
-- Faz 5 ve Faz 6'nın açık gate'leri (lint/test kırmızı, recurring/SLA,
-  takvim/drag-drop/provider map, test kapsamı) kapatılmadan Faz 7'ye
-  (Quotes) resmi olarak geçilmemeli. Şemanın `20260915122624_field_service_operations`
-  migration'ı ile Faz 7-12 tablolarının önceden oluşturulmuş olması bu sıra
-  ilkesini değiştirmez — şema hazır olması, o fazın tamamlandığı anlamına
-  gelmez.
+- Faz 5 ve Faz 6'nın açık gate'leri kapatılmadan Faz 7'ye (Quotes) resmi
+  olarak geçilmemeli. 18.09.2026 itibarıyla lint/test kırmızı durumu ve
+  dispatch konum hatası giderildi (bkz. GÜNCELLEME bölümü); **recurring
+  generation, servis sözleşmesi/SLA, takvim/drag-drop/provider map ve
+  jobs/employees/dispatch modüllerinin entegrasyon test kapsamı hâlâ eksik**
+  — bu kalemler kapanmadan gate açık kalmaya devam ediyor. Şemanın
+  `20260915122624_field_service_operations` migration'ı ile Faz 7-12
+  tablolarının önceden oluşturulmuş olması bu sıra ilkesini değiştirmez —
+  şema hazır olması, o fazın tamamlandığı anlamına gelmez.
+
+## GÜNCELLEME: CI düzeltmeleri (18.09.2026)
+
+Faz 5/6 taramasında (17.09.2026) bulunan üç sorun ayrı branch'lerde
+düzeltilip `main`'e merge edildi; her merge sonrası `main` üzerinde
+`pnpm test` gerçekten çalıştırılıp yeşil olduğu doğrulandı:
+
+- `fix/ci-migration-list` — `auth.integration.test.ts`'teki
+  `applyMigrations()` listesine eksik `20260915122624_field_service_operations`
+  migration'ı eklendi; `CustomerAddress.latitude` kolonu eksikliğinden
+  kaynaklanan `P2022`/500 hatası giderildi.
+- `fix/dispatch-employee-location` — `dispatch.service.ts` artık
+  `TechnicianLocation`'dan gerçek konum okuyor; `employees.service.ts`
+  `recordLocation`/`getRecentLocation` artık `employeeId`'yi
+  `EmployeeProfile` üzerinden gerçek `memberId`'ye çözüyor. Regresyonu
+  kilitleyen `apps/api/src/dispatch/dispatch.service.test.ts` eklendi.
+- Aynı branch'te `packages/database/peek.mjs` içindeki `no-undef`
+  (`console`) lint hatası, `infrastructure/scripts/local-postgres.mjs`'teki
+  mevcut `import process from "node:process"` konvansiyonuna uyularak
+  `import console from "node:console"` ile giderildi.
+
+**Sonuç**: `main` üzerinde şu an `pnpm lint`, `pnpm typecheck`, `pnpm test`
+ve `pnpm build` yeşil. Bu, Faz 5/6'nın acceptance gate'ini geçtiği anlamına
+gelmez — yukarıdaki KNOWN ISSUES'ta işaretli recurring/SLA, takvim/drag-drop/
+provider map ve genel test kapsamı eksiklikleri hâlâ açık; sadece CI'ın
+kırmızı olma nedeni ortadan kalktı.
