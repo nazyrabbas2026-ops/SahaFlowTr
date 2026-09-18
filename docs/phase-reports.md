@@ -452,3 +452,15 @@ ve `pnpm build` yeşil. Bu, Faz 5/6'nın acceptance gate'ini geçtiği anlamına
 gelmez — yukarıdaki KNOWN ISSUES'ta işaretli recurring/SLA, takvim/drag-drop/
 provider map ve genel test kapsamı eksiklikleri hâlâ açık; sadece CI'ın
 kırmızı olma nedeni ortadan kalktı.
+
+**Yeni bulgu (18.09.2026, `pnpm test:e2e` ilk kez bu tur çalıştırıldı)**:
+`tests/e2e/foundation.spec.ts` içindeki "creates a customer and opens the
+customer 360 record" ve "creates a job and opens its workflow history"
+senaryoları `main` üzerinde de başarısız — form submit sonrası ilgili detay
+başlığı hiç render olmuyor (sayfa liste görünümünde kalıyor, bir `alert`
+role'ü beliriyor). Bu, `git stash` ile main'e geçilip aynı testin orada da
+başarısız olduğu doğrulanarak, sonradan eklenen jobs.tsx düzenleme/not
+özelliğinden bağımsız, önceden var olan bir hata olduğu kanıtlandı — CI
+`pnpm lint`/`pnpm test` bu oturumdan önce zaten kırmızı olduğu için
+`test:e2e` adımına hiç ulaşmamış ve bu hata fark edilmemiş olabilir. Kök
+neden henüz araştırılmadı; ayrı bir `fix/` dalında ele alınmalı.

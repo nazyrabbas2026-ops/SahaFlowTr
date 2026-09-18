@@ -4,6 +4,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardList,
+  Edit3,
   Plus,
   X,
 } from "lucide-react";
@@ -30,6 +31,8 @@ type Job = {
   status: JobStatus;
   priority: "LOW" | "NORMAL" | "HIGH" | "URGENT";
   scheduledStart: string | null;
+  problemDescription: string | null;
+  estimatedDurationMinutes: number | null;
   version: number;
   customer: { id: string; displayName: string };
   assignments: Array<{ id: string; member: { user: { name: string } } }>;
@@ -40,6 +43,13 @@ type Job = {
     reason: string | null;
     createdAt: string;
     changedBy: { name: string };
+  }>;
+  notes?: Array<{
+    id: string;
+    body: string;
+    visibility: "INTERNAL" | "CUSTOMER";
+    createdAt: string;
+    createdBy: { name: string };
   }>;
 };
 type Customer = { id: string; displayName: string; customerNumber: string };
@@ -83,6 +93,7 @@ export function Jobs({
     [state, setState] = useState<"loading" | "idle" | "error">("loading"),
     [error, setError] = useState(""),
     [form, setForm] = useState(false),
+    [editMode, setEditMode] = useState(false),
     [search, setSearch] = useState(""),
     [status, setStatus] = useState("ALL"),
     [page, setPage] = useState(1),
@@ -138,39 +149,91 @@ export function Jobs({
     ]);
     setCustomers(c.items);
     setMembers(m);
+    setEditMode(false);
     setForm(true);
   }
-  async function create(e: React.FormEvent<HTMLFormElement>) {
+  async function openEdit() {
+    if (!customers.length) {
+      const c = await json<{ items: Customer[] }>(
+        `/api/v1/organizations/${organizationId}/customers?page=1&pageSize=100&status=ACTIVE&type=ALL&search=`,
+      );
+      setCustomers(c.items);
+    }
+    setEditMode(true);
+    setForm(true);
+  }
+  function toLocalInput(iso: string | null) {
+    if (!iso) return undefined;
+    const d = new Date(iso);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+  async function saveJob(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const d = new FormData(e.currentTarget);
+    const payload: Record<string, unknown> = {
+      customerId: d.get("customerId"),
+      title: d.get("title"),
+      category: d.get("category"),
+      priority: d.get("priority"),
+      scheduledStart: d.get("scheduledStart")
+        ? new Date(String(d.get("scheduledStart"))).toISOString()
+        : null,
+      estimatedDurationMinutes: d.get("duration")
+        ? Number(d.get("duration"))
+        : null,
+      problemDescription: d.get("description") || null,
+    };
     try {
-      const job = await json<Job>(
-        `/api/v1/organizations/${organizationId}/jobs`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            customerId: d.get("customerId"),
-            title: d.get("title"),
-            category: d.get("category"),
-            priority: d.get("priority"),
-            scheduledStart: d.get("scheduledStart")
-              ? new Date(String(d.get("scheduledStart"))).toISOString()
-              : null,
-            estimatedDurationMinutes: d.get("duration")
-              ? Number(d.get("duration"))
-              : null,
-            problemDescription: d.get("description") || null,
-            tags: [],
-          }),
-        },
-      );
+      let job: Job;
+      if (editMode && detail) {
+        job = await json<Job>(
+          `/api/v1/organizations/${organizationId}/jobs/${detail.id}`,
+          {
+            method: "PATCH",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ ...payload, version: detail.version }),
+          },
+        );
+      } else {
+        job = await json<Job>(
+          `/api/v1/organizations/${organizationId}/jobs`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ ...payload, tags: [] }),
+          },
+        );
+      }
       setForm(false);
+      setEditMode(false);
       await load();
       await open(job.id);
       onChanged();
     } catch (e) {
       setError(e instanceof Error ? e.message : "İş emri kaydedilemedi");
+    }
+  }
+  async function addNote(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!detail) return;
+    const d = new FormData(e.currentTarget);
+    try {
+      await json(
+        `/api/v1/organizations/${organizationId}/jobs/${detail.id}/note`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            body: d.get("body"),
+            visibility: d.get("visibility"),
+          }),
+        },
+      );
+      e.currentTarget.reset();
+      await open(detail.id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Not eklenemedi");
     }
   }
   async function transition(action: string, reason?: string) {
@@ -220,11 +283,18 @@ export function Jobs({
               <StatusBadge>{labels[detail.status]}</StatusBadge>
             </div>
           </div>
-          <StatusBadge
-            tone={detail.priority === "URGENT" ? "warning" : "neutral"}
-          >
-            {detail.priority}
-          </StatusBadge>
+          <div className="detail-actions">
+            {permissions.includes("job.update") && (
+              <button onClick={() => void openEdit()}>
+                <Edit3 size={16} /> Düzenle
+              </button>
+            )}
+            <StatusBadge
+              tone={detail.priority === "URGENT" ? "warning" : "neutral"}
+            >
+              {detail.priority}
+            </StatusBadge>
+          </div>
         </div>
         <div className="job-detail-grid">
           <section className="content-card related-card">
@@ -328,10 +398,57 @@ export function Jobs({
               ))}
             </div>
           </section>
+          <section
+            className="content-card related-card"
+            style={{ gridColumn: "1 / -1" }}
+          >
+            <div className="section-title">
+              <h3>Notlar</h3>
+            </div>
+            {permissions.includes("job.update") && (
+              <form className="entity-form" onSubmit={(e) => void addNote(e)}>
+                <label className="form-field">
+                  <span>Not</span>
+                  <textarea name="body" rows={2} required maxLength={3000} />
+                </label>
+                <div className="form-grid">
+                  <label className="form-field">
+                    <span>Görünürlük</span>
+                    <select name="visibility" defaultValue="INTERNAL">
+                      <option value="INTERNAL">İç not</option>
+                      <option value="CUSTOMER">Müşteriye görünür</option>
+                    </select>
+                  </label>
+                  <button className="primary">Not ekle</button>
+                </div>
+              </form>
+            )}
+            <div className="timeline">
+              {detail.notes?.map((n) => (
+                <article key={n.id}>
+                  <span />
+                  <div>
+                    <strong>{n.createdBy.name}</strong>
+                    <small>
+                      {n.visibility === "CUSTOMER"
+                        ? "Müşteriye görünür"
+                        : "İç not"}{" "}
+                      · {new Date(n.createdAt).toLocaleString("tr-TR")}
+                    </small>
+                    <p>{n.body}</p>
+                  </div>
+                </article>
+              ))}
+              {!detail.notes?.length && (
+                <PanelState kind="empty">Henüz not eklenmedi.</PanelState>
+              )}
+            </div>
+          </section>
         </div>
         {error && <PanelState kind="error">{error}</PanelState>}
       </section>
     );
+  const editingJob = detail as Job | null;
   return (
     <section className="content-card customer-list-card">
       <div className="section-title customer-title">
@@ -442,21 +559,40 @@ export function Jobs({
         </button>
       </div>
       {form && (
-        <div className="dialog-backdrop" onMouseDown={() => setForm(false)}>
+        <div
+          className="dialog-backdrop"
+          onMouseDown={() => {
+            setForm(false);
+            setEditMode(false);
+          }}
+        >
           <section
             className="entity-modal"
             onMouseDown={(e) => e.stopPropagation()}
           >
             <div className="popover-title">
-              <strong>Yeni iş emri</strong>
-              <button onClick={() => setForm(false)}>
+              <strong>{editMode ? "İş emrini düzenle" : "Yeni iş emri"}</strong>
+              <button
+                onClick={() => {
+                  setForm(false);
+                  setEditMode(false);
+                }}
+              >
                 <X />
               </button>
             </div>
-            <form className="entity-form" onSubmit={create}>
+            <form
+              className="entity-form"
+              onSubmit={saveJob}
+              key={editMode ? `edit-${editingJob?.id}` : "create"}
+            >
               <label className="form-field">
                 <span>Müşteri</span>
-                <select name="customerId" required>
+                <select
+                  name="customerId"
+                  required
+                  defaultValue={editMode ? editingJob?.customer.id : ""}
+                >
                   <option value="">Seçin</option>
                   {customers.map((c) => (
                     <option key={c.id} value={c.id}>
@@ -468,17 +604,30 @@ export function Jobs({
               <div className="form-grid">
                 <label className="form-field">
                   <span>Başlık</span>
-                  <input name="title" required minLength={2} />
+                  <input
+                    name="title"
+                    required
+                    minLength={2}
+                    defaultValue={editMode ? editingJob?.title : undefined}
+                  />
                 </label>
                 <label className="form-field">
                   <span>Kategori</span>
-                  <input name="category" required minLength={2} />
+                  <input
+                    name="category"
+                    required
+                    minLength={2}
+                    defaultValue={editMode ? editingJob?.category : undefined}
+                  />
                 </label>
               </div>
               <div className="form-grid">
                 <label className="form-field">
                   <span>Öncelik</span>
-                  <select name="priority">
+                  <select
+                    name="priority"
+                    defaultValue={editMode ? editingJob?.priority : "NORMAL"}
+                  >
                     <option value="NORMAL">Normal</option>
                     <option value="HIGH">Yüksek</option>
                     <option value="URGENT">Acil</option>
@@ -487,20 +636,47 @@ export function Jobs({
                 </label>
                 <label className="form-field">
                   <span>Tahmini süre (dk)</span>
-                  <input name="duration" type="number" min="1" />
+                  <input
+                    name="duration"
+                    type="number"
+                    min="1"
+                    defaultValue={
+                      editMode
+                        ? (editingJob?.estimatedDurationMinutes ?? undefined)
+                        : undefined
+                    }
+                  />
                 </label>
               </div>
               <label className="form-field">
                 <span>Planlanan başlangıç</span>
-                <input name="scheduledStart" type="datetime-local" />
+                <input
+                  name="scheduledStart"
+                  type="datetime-local"
+                  defaultValue={
+                    editMode ? toLocalInput(editingJob?.scheduledStart ?? null) : undefined
+                  }
+                />
               </label>
               <label className="form-field">
                 <span>Sorun açıklaması</span>
-                <textarea name="description" rows={3} />
+                <textarea
+                  name="description"
+                  rows={3}
+                  defaultValue={
+                    editMode ? (editingJob?.problemDescription ?? undefined) : undefined
+                  }
+                />
               </label>
               {error && <div className="auth-error">{error}</div>}
               <div className="modal-actions">
-                <button type="button" onClick={() => setForm(false)}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setForm(false);
+                    setEditMode(false);
+                  }}
+                >
                   İptal
                 </button>
                 <button className="primary">Kaydet</button>
