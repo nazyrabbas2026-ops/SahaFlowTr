@@ -36,13 +36,26 @@ export class EmployeesService {
   }
 
   async getById(organizationId: string, employeeId: string) {
-    return this.db.employeeProfile.findUniqueOrThrow({
+    const employee = await this.db.employeeProfile.findUniqueOrThrow({
       where: { organizationId_id: { organizationId, id: employeeId } },
       include: {
         member: { select: { id: true, user: { select: { name: true, email: true } } } },
         skills: { include: { skill: true } },
       },
     });
+    const [workSchedule, timeEntries] = await Promise.all([
+      this.db.workSchedule.findMany({
+        where: { organizationId, memberId: employee.memberId },
+        orderBy: { weekday: "asc" },
+      }),
+      this.db.timeEntry.findMany({
+        where: { organizationId, memberId: employee.memberId },
+        include: { job: { select: { jobNumber: true, title: true } } },
+        orderBy: { startsAt: "desc" },
+        take: 10,
+      }),
+    ]);
+    return { ...employee, workSchedule, timeEntries };
   }
 
   async create(
