@@ -2,9 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   UNASSIGNED,
   addDays,
+  addMonths,
   cellKey,
   computeRescheduledRange,
+  endOfMonth,
+  getMonthGrid,
   resolveDropChanges,
+  startOfMonth,
   startOfWeek,
   toDateKey,
 } from "./dispatch-calendar.helpers";
@@ -87,6 +91,59 @@ describe("resolveDropChanges", () => {
     expect(
       resolveDropChanges(job, cellKey(UNASSIGNED, "2026-09-17")),
     ).toEqual({ dayKey: "2026-09-17" });
+  });
+});
+
+describe("startOfMonth / endOfMonth", () => {
+  it("returns the 1st of the month regardless of the given day", () => {
+    expect(toDateKey(startOfMonth(local(2026, 9, 17)))).toBe("2026-09-01");
+  });
+
+  it("returns the last day of a 30-day month", () => {
+    expect(toDateKey(endOfMonth(local(2026, 9, 17)))).toBe("2026-09-30");
+  });
+
+  it("returns the last day of February in a non-leap year", () => {
+    // 2026 % 4 !== 0, so February has 28 days
+    expect(toDateKey(endOfMonth(local(2026, 2, 10)))).toBe("2026-02-28");
+  });
+});
+
+describe("addMonths", () => {
+  it("moves forward and backward by whole months", () => {
+    expect(toDateKey(addMonths(local(2026, 9, 1), 1))).toBe("2026-10-01");
+    expect(toDateKey(addMonths(local(2026, 9, 1), -1))).toBe("2026-08-01");
+  });
+
+  it("rolls over into the following month when the day does not exist there", () => {
+    // February 2026 only has 28 days, so day 31 overflows into March
+    expect(toDateKey(addMonths(local(2026, 1, 31), 1))).toBe("2026-03-03");
+  });
+});
+
+describe("getMonthGrid", () => {
+  it("builds a Monday-to-Sunday aligned 5-week grid for September 2026", () => {
+    const grid = getMonthGrid(local(2026, 9, 17));
+    expect(grid).toHaveLength(35);
+    expect(toDateKey(grid[0]!)).toBe("2026-08-31");
+    expect(toDateKey(grid.at(-1)!)).toBe("2026-10-04");
+    expect(grid.some((d) => toDateKey(d) === "2026-09-01")).toBe(true);
+    expect(grid.some((d) => toDateKey(d) === "2026-09-30")).toBe(true);
+  });
+
+  it("extends to a 6-week grid when the month starts on a Sunday", () => {
+    // 2026-11-01 is a Sunday, so the grid needs a leading and trailing week
+    const grid = getMonthGrid(local(2026, 11, 5));
+    expect(grid).toHaveLength(42);
+    expect(toDateKey(grid[0]!)).toBe("2026-10-26");
+    expect(toDateKey(grid.at(-1)!)).toBe("2026-12-06");
+  });
+
+  it("always starts on a Monday and ends on a Sunday", () => {
+    const grid = getMonthGrid(local(2026, 3, 1));
+    expect(grid[0]!.getDay()).toBe(1);
+    expect(grid.at(-1)!.getDay()).toBe(0);
+    expect(grid.length % 7).toBe(0);
   });
 });
 

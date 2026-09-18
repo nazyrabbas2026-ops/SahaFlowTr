@@ -13,8 +13,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   UNASSIGNED,
   addDays,
+  addMonths,
   cellKey,
   computeRescheduledRange,
+  getMonthGrid,
   resolveDropChanges,
   startOfWeek,
   toDateKey,
@@ -70,7 +72,8 @@ export function DispatchCalendar({
   organizationId: string;
   permissions: string[];
 }) {
-  const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
+  const [view, setView] = useState<"week" | "month">("week");
+  const [anchor, setAnchor] = useState(() => new Date());
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [jobs, setJobs] = useState<CalendarJob[]>([]);
   const [state, setState] = useState<"loading" | "idle" | "error">("loading");
@@ -80,15 +83,18 @@ export function DispatchCalendar({
     permissions.includes("job.assign") && permissions.includes("job.update");
 
   const days = useMemo(
-    () => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)),
-    [weekStart],
+    () =>
+      view === "month"
+        ? getMonthGrid(anchor)
+        : Array.from({ length: 7 }, (_, i) => addDays(startOfWeek(anchor), i)),
+    [view, anchor],
   );
 
   const load = useCallback(async () => {
     setState("loading");
     try {
-      const from = weekStart.toISOString();
-      const to = addDays(weekStart, 7).toISOString();
+      const from = days[0]!.toISOString();
+      const to = addDays(days[days.length - 1]!, 1).toISOString();
       const [emp, jobsResponse] = await Promise.all([
         json<Employee[]>(`/api/v1/organizations/${organizationId}/employees`),
         json<{ items: CalendarJob[] }>(
@@ -102,7 +108,7 @@ export function DispatchCalendar({
       setError(e instanceof Error ? e.message : "Takvim verileri alınamadı");
       setState("error");
     }
-  }, [organizationId, weekStart]);
+  }, [organizationId, days]);
 
   useEffect(() => {
     void load();
@@ -181,36 +187,48 @@ export function DispatchCalendar({
     }
   }
 
+  function goPrevious() {
+    setAnchor((d) => (view === "month" ? addMonths(d, -1) : addDays(d, -7)));
+  }
+  function goNext() {
+    setAnchor((d) => (view === "month" ? addMonths(d, 1) : addDays(d, 7)));
+  }
+
   return (
     <section className="content-card table-card week-calendar-card">
       <div className="section-title customer-title">
         <div>
           <p className="eyebrow">DİSPATCH</p>
-          <h2>Haftalık Takvim</h2>
+          <h2>{view === "month" ? "Aylık Takvim" : "Haftalık Takvim"}</h2>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <button
-            className="row-action"
-            onClick={() => setWeekStart((d) => addDays(d, -7))}
+            className={view === "week" ? "primary" : "row-action"}
+            onClick={() => setView("week")}
           >
-            <ChevronLeft size={14} /> Önceki hafta
+            Hafta
+          </button>
+          <button
+            className={view === "month" ? "primary" : "row-action"}
+            onClick={() => setView("month")}
+          >
+            Ay
+          </button>
+          <button className="row-action" onClick={goPrevious}>
+            <ChevronLeft size={14} />{" "}
+            {view === "month" ? "Önceki ay" : "Önceki hafta"}
           </button>
           <StatusBadge>
-            {days[0]!.toLocaleDateString("tr-TR", {
-              day: "numeric",
-              month: "long",
-            })}{" "}
-            –{" "}
-            {days[6]!.toLocaleDateString("tr-TR", {
-              day: "numeric",
-              month: "long",
-            })}
+            {view === "month"
+              ? anchor.toLocaleDateString("tr-TR", {
+                  month: "long",
+                  year: "numeric",
+                })
+              : `${days[0]!.toLocaleDateString("tr-TR", { day: "numeric", month: "long" })} – ${days[6]!.toLocaleDateString("tr-TR", { day: "numeric", month: "long" })}`}
           </StatusBadge>
-          <button
-            className="row-action"
-            onClick={() => setWeekStart((d) => addDays(d, 7))}
-          >
-            Sonraki hafta <ChevronRight size={14} />
+          <button className="row-action" onClick={goNext}>
+            {view === "month" ? "Sonraki ay" : "Sonraki hafta"}{" "}
+            <ChevronRight size={14} />
           </button>
         </div>
       </div>
@@ -227,18 +245,32 @@ export function DispatchCalendar({
 
       {state === "idle" && employees.length > 0 && (
         <DndContext sensors={sensors} onDragEnd={(e) => void handleDragEnd(e)}>
-          <div className="week-calendar">
+          <div
+            className="week-calendar"
+            style={{
+              gridTemplateColumns: `150px repeat(${days.length}, minmax(${view === "month" ? 84 : 140}px, 1fr))`,
+            }}
+          >
             <div className="week-calendar-row week-calendar-head">
               <div className="week-calendar-lane-label" />
               {days.map((day, index) => (
                 <div key={toDateKey(day)} className="week-calendar-day-head">
-                  <strong>{dayLabels[index]}</strong>
-                  <small>
-                    {day.toLocaleDateString("tr-TR", {
-                      day: "numeric",
-                      month: "short",
-                    })}
-                  </small>
+                  {view === "week" ? (
+                    <>
+                      <strong>{dayLabels[index]}</strong>
+                      <small>
+                        {day.toLocaleDateString("tr-TR", {
+                          day: "numeric",
+                          month: "short",
+                        })}
+                      </small>
+                    </>
+                  ) : (
+                    <>
+                      <strong>{day.getDate()}</strong>
+                      <small>{dayLabels[index % 7]!.slice(0, 3)}</small>
+                    </>
+                  )}
                 </div>
               ))}
             </div>
@@ -256,6 +288,7 @@ export function DispatchCalendar({
                       key={cellId}
                       id={cellId}
                       draggable={canDrag}
+                      maxVisible={view === "month" ? 2 : undefined}
                       jobs={jobsByCell.get(cellId) ?? []}
                     />
                   );
@@ -276,6 +309,7 @@ export function DispatchCalendar({
                       id={cellId}
                       draggable={canDrag}
                       droppable={false}
+                      maxVisible={view === "month" ? 2 : undefined}
                       jobs={jobsByCell.get(cellId) ?? []}
                     />
                   );
@@ -300,21 +334,31 @@ function CalendarCell({
   jobs,
   draggable,
   droppable = true,
+  maxVisible,
 }: {
   id: string;
   jobs: CalendarJob[];
   draggable: boolean;
   droppable?: boolean;
+  /** Ay görünümünde dar hücrelerde tüm işleri sıkıştırmak yerine ilk
+   * `maxVisible` kadarını gösterip kalanı "+N daha" ile özetler. */
+  maxVisible?: number;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id, disabled: !droppable });
+  const visibleJobs =
+    maxVisible !== undefined ? jobs.slice(0, maxVisible) : jobs;
+  const hiddenCount = jobs.length - visibleJobs.length;
   return (
     <div
       ref={droppable ? setNodeRef : undefined}
       className={isOver ? "week-calendar-cell over" : "week-calendar-cell"}
     >
-      {jobs.map((job) => (
+      {visibleJobs.map((job) => (
         <JobChip key={job.id} job={job} draggable={draggable} />
       ))}
+      {hiddenCount > 0 && (
+        <div className="job-chip-more">+{hiddenCount} daha</div>
+      )}
     </div>
   );
 }

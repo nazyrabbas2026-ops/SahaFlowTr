@@ -14,6 +14,45 @@ export function addDays(date: Date, amount: number) {
   return d;
 }
 
+/** Ayın yerel takvimdeki ilk günü, yerel gece yarısı. */
+export function startOfMonth(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+/** Ayın yerel takvimdeki son günü, yerel gece yarısı. */
+export function endOfMonth(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth() + 1, 0);
+}
+
+/**
+ * Ayı `amount` kadar ileri/geri kaydırır. Sadece ayın 1'ine hizalanmış
+ * tarihlerle (takvim navigasyonu) kullanılmak üzere tasarlandı; gün
+ * bileşenini korur ama hedef ayda o gün yoksa (ör. 31 Ocak + 1 ay) JS'in
+ * standart taşma davranışına tabidir.
+ */
+export function addMonths(date: Date, amount: number) {
+  return new Date(date.getFullYear(), date.getMonth() + amount, date.getDate());
+}
+
+/**
+ * Ay görünümü için hafta başlangıcına hizalanmış tam bir grid üretir: ayın
+ * ilk gününün bulunduğu haftanın Pazartesi'sinden, son gününün bulunduğu
+ * haftanın Pazar'ına kadar (her zaman 7'nin katı sayıda gün). `addDays` ile
+ * tek tek ilerliyoruz (yaz saati geçişlerinde bile güvenli); ham milisaniye
+ * farkıyla gün sayısı hesaplamıyoruz.
+ */
+export function getMonthGrid(monthDate: Date): Date[] {
+  const gridStart = startOfWeek(startOfMonth(monthDate));
+  const gridEnd = addDays(startOfWeek(endOfMonth(monthDate)), 6);
+  const days: Date[] = [];
+  let cursor = gridStart;
+  while (cursor.getTime() <= gridEnd.getTime()) {
+    days.push(cursor);
+    cursor = addDays(cursor, 1);
+  }
+  return days;
+}
+
 /**
  * Tarayıcının yerel saatine göre YYYY-MM-DD anahtarı üretir. `toISOString()`
  * kullanmıyoruz: o UTC'ye çevirir ve pozitif UTC ofsetli saat dilimlerinde
