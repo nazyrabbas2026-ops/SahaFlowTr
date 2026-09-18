@@ -281,6 +281,23 @@ gerçekten çalıştırıldı.
   sadece manuel `POST :id/generate`), haftalık/özel RRULE desteği (sadece
   "her N ayda bir"), ziyaret kotası/SLA/dahil malzeme takibi, yenileme
   akışı, `apps/worker`'a veritabanı erişimi.]**
+  **[18.09.2026, ikinci ekleme — web arayüzü
+  (`feature/service-agreements-ui`)]**: Servis sözleşmeleri artık müşteri 360
+  görünümünde kendi bölümüne sahip (`apps/web/components/service-agreements.tsx`,
+  `customers.tsx`'teki alt-kayıt deseniyle aynı: liste + modal). Bölümde
+  sözleşme listesi (aktif/pasif, "her N ayda bir", sonraki üretim dönemi),
+  tüm alanları içeren oluştur/düzenle formu, satır başına "Şimdi Üret"
+  (`POST :id/generate`) ve açılıp kapanan üretim geçmişi (generation ledger,
+  üretilen iş emri numarasıyla) var. Ledger'ı görünür kılmak bilinçli bir
+  karar: tamamen gizli bir idempotency defteri kullanıcıya güven vermiyor.
+  İki küçük backend eklemesi bu arayüz için yapıldı: (1) yanıtlara
+  `nextOccurrence` alanı — "sonraki üretim dönemi" hesabı istemcide
+  tekrarlanmasın diye `packages/domain`'deki yeni saf
+  `nextOccurrenceAfter()` ile backend'de üretiliyor; (2) `generate()`
+  yanıtındaki her döneme `created` bayrağı — idempotent tekrar çağrıda
+  ledger kaydı aynı `GENERATED` durumuyla döndüğü için istemci aksi hâlde
+  "yeni iş emri oluşturuldu" ile "zaten vardı"yı ayırt edemiyordu ve yanlış
+  mesaj gösteriyordu.
 - **Geçiş testleri**: jobs modülüne özel hiçbir unit/integration testi yok.
   Tek ilgili test, `tests/e2e/foundation.spec.ts` içindeki "creates a job and
   opens its workflow history" — gerçek API'ye karşı değil, `page.route` ile
@@ -303,6 +320,11 @@ gerçekten çalıştırıldı.
 - **[18.09.2026]** `apps/api/src/service-agreements/{service-agreements.controller.ts,service-agreements.module.ts,service-agreements.schemas.ts,service-agreements.service.ts}`,
   `packages/domain/src/{recurrence.ts,recurrence.test.ts}`,
   `packages/database/prisma/migrations/20260918105223_service_agreements`.
+- **[18.09.2026, web arayüzü]** `apps/web/components/service-agreements.tsx`,
+  `service-agreements.helpers.ts` (+ `.test.ts`, "Şimdi Üret" sonuç mesajının
+  saf mantığı), `apps/web/components/customers.tsx` (müşteri 360'a bölümün
+  eklenmesi), `apps/web/app/globals.css`,
+  `tests/e2e/service-agreements.spec.ts`.
 
 ### DATABASE
 
@@ -564,3 +586,61 @@ alınarak süreçleri sonlandırıldı ve port 3100 boşaltıldı.
 
 Doğrulama: `fix/e2e-customer-job-creation` dalında `pnpm test:e2e` **8/8**
 geçti (iki kez tekrarlanarak teyit edildi).
+
+## GÜNCELLEME: Servis sözleşmeleri arayüzü (18.09.2026)
+
+`feature/service-agreements-ui` dalı, `feature/service-agreements` ile gelen
+backend'in üzerine müşteri 360 içinde bir "Servis Sözleşmeleri" bölümü ekledi
+(ayrıntı için Faz 5 bölümündeki ilgili madde). Arayüz `customers.tsx`'teki
+mevcut alt-kayıt desenini (liste + oluştur/düzenle modalı) tekrar kullanıyor.
+
+### Bu dalda yapılan iki backend eklemesi ve gerekçeleri
+
+- `nextOccurrence`: sözleşme yanıtlarına eklenen, salt görüntüleme amaçlı bir
+  alan. "Sonraki üretim dönemi"nin istemcide ikinci bir tekrar-hesabı olarak
+  yeniden yazılmaması için `packages/domain/src/recurrence.ts` içine
+  `computeDueOccurrences`'ın ayna sorgusu olan saf `nextOccurrenceAfter()`
+  eklendi ve backend'de kullanıldı. Üretim kararı hâlâ yalnızca
+  `generate()` + generation ledger'a ait.
+- `generate()` yanıtındaki dönemlere `created` bayrağı: idempotent ikinci
+  çağrıda ledger kaydı da `GENERATED` durumuyla döndüğü için istemci
+  "şimdi üretildi" ile "zaten vardı"yı ayırt edemiyor ve **yanlışlıkla "yeni
+  iş emri oluşturuldu" mesajı gösteriyordu**. Bu hata mock'suz gerçek-stack
+  doğrulamasında yakalandı; mock'lu Playwright senaryosu yakalayamamıştı.
+
+### TEST RESULTS (18.09.2026, gerçekten çalıştırıldı)
+
+- `pnpm db:generate` OK (şema değişmedi, bu dalda migration yok),
+  `pnpm lint` temiz, `pnpm typecheck` 7/7, `pnpm test` **50/50**,
+  `pnpm build` 5/5, `pnpm test:e2e` **14/14**.
+- Ek olarak mock'suz gerçek stack (yerel PostgreSQL + API + web) üzerinde
+  uçtan uca doğrulama: sözleşme oluşturma → "Şimdi Üret" → 3 gerçek iş emri
+  (`WO-2026-000001..3`) → ledger'da görünmesi → ikinci üretimin idempotent
+  olması → iş emirlerinin İş Emirleri sekmesinde listelenmesi. 1440px ve
+  390px görsel kontrol yapıldı, mobilde yatay taşma yok.
+
+### KNOWN ISSUES / bu sırada bulunan bağımsız kusurlar
+
+- **Müşteri oluşturma gerçek API'ye karşı kırık (main'de mevcut, bu dalın
+  kapsamı dışında)**: `apps/api/src/customers/customers.schemas.ts` içindeki
+  `createCustomerSchema`, `primaryPhone`/`alternatePhone`/`email` için `null`
+  kabul etmiyor (`phone.optional()`, `optionalEmail`), ancak
+  `apps/web/components/customers.tsx` boş alanları `null` gönderiyor. Bu
+  yüzden bu alanlardan biri boş bırakıldığında `POST /customers` 400 dönüyor.
+  `updateCustomerSchema` aynı alanlarda `null`'a izin verdiği için düzenleme
+  akışı etkilenmiyor. `tests/e2e/foundation.spec.ts`'teki "creates a
+  customer" senaryosu POST yanıtını tamamen mock'ladığı için bu hatayı
+  yakalayamıyor — yani o test yanlış güven veriyor.
+- **Demo veritabanı drift'i**: `.local/postgres` demo veritabanında
+  `ServiceAgreement` tablosu ve `service-agreement.*` izinleri vardı ama
+  `operations.service-agreements` entitlement satırı yoktu; migration bu
+  veritabanına, dosyanın entitlement INSERT'i eklenmeden önceki hâliyle
+  uygulanmış. Arayüz bunu doğru şekilde "Bu özellik mevcut planınızda etkin
+  değil" hatasıyla gösterdi. Demo veritabanı, migration'daki INSERT'in
+  aynısı çalıştırılarak onarıldı; temiz kurulumlar (CI, entegrasyon testi)
+  etkilenmiyor.
+- `tests/e2e/dispatch-calendar.spec.ts`'teki "week/month toggle" senaryosu
+  paralel yük altında bir kez flake etti (ay grid'i 0 gün döndü); aynı dosya
+  tek başına 3 kez tekrarlandığında 9/9 geçti ve tam suite tekrar çalışınca
+  14/14 yeşil oldu. Bu dalın değişiklikleriyle ilgisi yok, ama takvim testi
+  kararlılık açısından izlenmeli.

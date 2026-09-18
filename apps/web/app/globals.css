@@ -1537,6 +1537,68 @@ th {
   height: 29px;
   padding: 0;
 }
+.service-agreement-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 15px;
+}
+.service-agreement-row {
+  display: grid;
+  gap: 8px;
+  padding: 13px 0;
+  border-top: 1px solid var(--border);
+}
+.service-agreement-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.service-agreement-head small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 8px;
+}
+.service-agreement-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  color: var(--muted);
+  font-size: 8px;
+}
+.service-agreement-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.service-agreement-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 8px 11px;
+  font-size: 9px;
+  font-weight: 650;
+}
+.service-agreement-actions .primary {
+  border-color: #2563eb;
+  background: #2563eb;
+  color: #fff;
+}
+.service-agreement-actions button:disabled {
+  opacity: 0.55;
+}
+.service-agreement-message {
+  color: var(--muted);
+  font-size: 8px;
+}
+.generation-history {
+  margin-top: 6px;
+}
 .entity-modal {
   width: min(620px, calc(100vw - 28px));
   max-height: calc(100vh - 36px);

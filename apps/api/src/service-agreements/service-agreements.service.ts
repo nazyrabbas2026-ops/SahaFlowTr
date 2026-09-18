@@ -6,7 +6,11 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { Prisma, ServiceAgreementGenerationStatus } from "@sahaflow/database";
-import { computeDueOccurrences, periodKeyFor } from "@sahaflow/domain";
+import {
+  computeDueOccurrences,
+  nextOccurrenceAfter,
+  periodKeyFor,
+} from "@sahaflow/domain";
 import type { Request } from "express";
 import { AuditService } from "../audit/audit.service";
 import { requestMeta } from "../common/http";
@@ -56,7 +60,7 @@ export class ServiceAgreementsService {
       this.db.serviceAgreement.count({ where }),
     ]);
     return {
-      items,
+      items: items.map((item) => this.withNextOccurrence(item)),
       pagination: {
         page: input.page,
         pageSize: input.pageSize,
@@ -72,7 +76,7 @@ export class ServiceAgreementsService {
       include: detailInclude,
     });
     if (!item) throw new NotFoundException("Servis sözleşmesi bulunamadı");
-    return item;
+    return this.withNextOccurrence(item);
   }
 
   async create(org: string, actor: string, input: CreateServiceAgreementInput, req: Request) {
@@ -102,7 +106,7 @@ export class ServiceAgreementsService {
       entityId: item.id,
       ...requestMeta(req),
     });
-    return item;
+    return this.withNextOccurrence(item);
   }
 
   async update(
@@ -187,10 +191,15 @@ export class ServiceAgreementsService {
       asOf,
     );
 
+    // `created`, bu çağrının dönemi gerçekten yeni üretip üretmediğini söyler;
+    // idempotent tekrar çağrılarda ledger'daki kayıt aynı `status` ile geri
+    // döndüğü için istemci aksi hâlde "yeni iş emri oluşturuldu" ile "zaten
+    // vardı" durumlarını ayırt edemez.
     const results: Array<{
       periodKey: string;
       status: ServiceAgreementGenerationStatus;
       jobId: string | null;
+      created: boolean;
     }> = [];
 
     for (const occurrence of occurrences) {
@@ -209,6 +218,7 @@ export class ServiceAgreementsService {
           periodKey,
           status: existingRun.status,
           jobId: existingRun.jobId,
+          created: false,
         });
         continue;
       }
@@ -249,6 +259,7 @@ export class ServiceAgreementsService {
           periodKey,
           status: ServiceAgreementGenerationStatus.GENERATED,
           jobId: job.id,
+          created: true,
         });
       } catch (error) {
         await this.db.serviceAgreementGenerationRun.create({
@@ -266,6 +277,7 @@ export class ServiceAgreementsService {
           periodKey,
           status: ServiceAgreementGenerationStatus.FAILED,
           jobId: null,
+          created: false,
         });
       }
     }
@@ -281,6 +293,33 @@ export class ServiceAgreementsService {
     });
 
     return { periods: results };
+  }
+
+  /** Şimdiye göre bir sonraki planlı tekrar tarihini yanıta ekler — salt
+   * görüntüleme amaçlı (web UI'daki "sonraki üretim dönemi"); asıl üretim
+   * kararı hâlâ `generate()`'in kendi `computeDueOccurrences` + ledger
+   * kontrolüne ait. Pasif sözleşmelerde her zaman `null` döner. */
+  private withNextOccurrence<
+    T extends {
+      active: boolean;
+      anchorDate: Date;
+      startDate: Date;
+      endDate: Date | null;
+      recurrenceIntervalMonths: number;
+    },
+  >(agreement: T): T & { nextOccurrence: string | null } {
+    const nextOccurrence = agreement.active
+      ? (nextOccurrenceAfter(
+          {
+            anchorDate: agreement.anchorDate,
+            startDate: agreement.startDate,
+            endDate: agreement.endDate,
+            intervalMonths: agreement.recurrenceIntervalMonths,
+          },
+          new Date(),
+        )?.toISOString() ?? null)
+      : null;
+    return { ...agreement, nextOccurrence };
   }
 
   private async validateLinks(

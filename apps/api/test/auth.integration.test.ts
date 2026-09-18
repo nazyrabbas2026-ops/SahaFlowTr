@@ -542,6 +542,12 @@ describe("auth, organization and tenant isolation", () => {
       .expect(201);
     const agreementId = created.body.id as string;
     expect(created.body.version).toBe(1);
+    // Web arayüzü "sonraki üretim dönemi"ni bu alandan okur; hesap backend'de
+    // kalsın diye yanıta ekleniyor, istemcide tekrar hesaplanmıyor.
+    expect(created.body.nextOccurrence).toEqual(expect.any(String));
+    expect(new Date(created.body.nextOccurrence as string).getTime()).toBeGreaterThan(
+      Date.now(),
+    );
 
     await other
       .get(`/api/v1/organizations/${organizationId}/service-agreements/${agreementId}`)
@@ -562,6 +568,9 @@ describe("auth, organization and tenant isolation", () => {
         (p: { status: string }) => p.status === "GENERATED",
       ),
     ).toBe(true);
+    expect(
+      firstGenerate.body.periods.every((p: { created: boolean }) => p.created),
+    ).toBe(true);
 
     // Aynı dönem aralığı için tekrar çağrılsa bile (idempotency) ikinci bir
     // iş emri üretilmemeli; ledger zaten üretilmiş dönemleri döndürmeli.
@@ -578,6 +587,11 @@ describe("auth, organization and tenant isolation", () => {
     ).toEqual(
       firstGenerate.body.periods.map((p: { jobId: string }) => p.jobId),
     );
+    // Aynı dönemler ledger'dan döndüğü için `created` false olmalı; istemci
+    // "yeni iş emri oluşturuldu" mesajını buna göre kuruyor.
+    expect(
+      secondGenerate.body.periods.some((p: { created: boolean }) => p.created),
+    ).toBe(false);
 
     const jobsList = await owner
       .get(`/api/v1/organizations/${organizationId}/jobs`)
@@ -605,5 +619,20 @@ describe("auth, organization and tenant isolation", () => {
       .expect(200);
     expect(detail.body.title).toBe("Güncellendi");
     expect(detail.body.generationRuns).toHaveLength(2);
+
+    const deactivated = await owner
+      .patch(
+        `/api/v1/organizations/${organizationId}/service-agreements/${agreementId}`,
+      )
+      .send({ version: 2, active: false })
+      .expect(200);
+    expect(deactivated.body.active).toBe(false);
+    expect(deactivated.body.nextOccurrence).toBeNull();
+    await owner
+      .post(
+        `/api/v1/organizations/${organizationId}/service-agreements/${agreementId}/generate`,
+      )
+      .send({ asOf: "2026-04-01T00:00:00.000Z" })
+      .expect(403);
   });
 });
