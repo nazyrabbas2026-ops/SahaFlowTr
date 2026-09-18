@@ -21,6 +21,7 @@ import { useCallback, useEffect, useState } from "react";
 import { type Resolver, useForm } from "react-hook-form";
 import { z } from "zod";
 import { PanelState, StatusBadge } from "./design-system";
+import { ServiceAgreementsSection } from "./service-agreements";
 
 type CustomerType = "INDIVIDUAL" | "COMPANY";
 type CustomerStatus = "ACTIVE" | "ARCHIVED";
@@ -455,6 +456,16 @@ export function Customers({
                     />
                   ))}
               </RelatedSection>
+              {permissions.includes("service-agreement.read") && (
+                <ServiceAgreementsSection
+                  organizationId={organizationId}
+                  customerId={detail.id}
+                  assets={detail.assets
+                    .filter((item) => item.active)
+                    .map((item) => ({ id: item.id, name: item.name }))}
+                  permissions={permissions}
+                />
+              )}
             </div>
           </>
         )}

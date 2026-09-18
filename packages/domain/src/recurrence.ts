@@ -19,6 +19,22 @@ function addMonthsUtc(date: Date, months: number): Date {
   );
 }
 
+/** `anchorDate`'ten `intervalMonths` adımlarla ilerleyip `startDate`'e
+ * eşit/sonraki ilk tekrar tarihine ulaşır — `computeDueOccurrences` ve
+ * `nextOccurrenceAfter` ortak başlangıç noktasını burada paylaşır. */
+function firstOccurrenceFrom(input: RecurrenceInput): {
+  occurrence: Date;
+  index: number;
+} {
+  let index = 0;
+  let occurrence = input.anchorDate;
+  while (occurrence.getTime() < input.startDate.getTime()) {
+    index += 1;
+    occurrence = addMonthsUtc(input.anchorDate, index * input.intervalMonths);
+  }
+  return { occurrence, index };
+}
+
 /**
  * `anchorDate`'ten başlayıp `intervalMonths` adımlarla ilerleyen, ancak
  * `startDate`'e eşit/sonraki, `asOf`'a eşit/önceki ve (varsa) `endDate`'i
@@ -33,12 +49,7 @@ export function computeDueOccurrences(
   asOf: Date,
 ): Date[] {
   const occurrences: Date[] = [];
-  let index = 0;
-  let occurrence = input.anchorDate;
-  while (occurrence.getTime() < input.startDate.getTime()) {
-    index += 1;
-    occurrence = addMonthsUtc(input.anchorDate, index * input.intervalMonths);
-  }
+  let { occurrence, index } = firstOccurrenceFrom(input);
   while (
     occurrence.getTime() <= asOf.getTime() &&
     (!input.endDate || occurrence.getTime() <= input.endDate.getTime())
@@ -48,6 +59,27 @@ export function computeDueOccurrences(
     occurrence = addMonthsUtc(input.anchorDate, index * input.intervalMonths);
   }
   return occurrences;
+}
+
+/**
+ * `computeDueOccurrences`'ın ayna sorgusu: `asOf`'tan kesinlikle sonraki ilk
+ * tekrar tarihini döner (üretilip üretilmediğine bakmaz, sadece takvim
+ * hesabıdır). Sözleşme `endDate`'i aştıysa `null` döner. Web arayüzünde
+ * "sonraki üretim dönemi"ni göstermek için kullanılır; asıl üretim kararı
+ * hâlâ `computeDueOccurrences` + generation ledger'a aittir.
+ */
+export function nextOccurrenceAfter(
+  input: RecurrenceInput,
+  asOf: Date,
+): Date | null {
+  let { occurrence, index } = firstOccurrenceFrom(input);
+  while (occurrence.getTime() <= asOf.getTime()) {
+    index += 1;
+    occurrence = addMonthsUtc(input.anchorDate, index * input.intervalMonths);
+  }
+  if (input.endDate && occurrence.getTime() > input.endDate.getTime())
+    return null;
+  return occurrence;
 }
 
 /** Bir tekrar tarihini generation ledger için değişmez bir dönem
