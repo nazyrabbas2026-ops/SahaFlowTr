@@ -230,3 +230,182 @@ NEXT PHASE:
 ### NEXT PHASE
 
 - Phase 5 — Jobs / İş Emirleri.
+
+## PHASE: 5
+
+### STATUS
+
+PARTIALLY IMPLEMENTED — GATE NOT PASSED. Bu bölüm 17.09.2026'da kod tabanı
+taranarak (tahmin edilmeden) yazıldı: `apps/api/src/jobs`,
+`apps/api/src/employees`, `packages/database/prisma/schema.prisma` ve ilgili
+migration/test dosyaları okundu; `pnpm lint`/`pnpm typecheck`/`pnpm test`
+gerçekten çalıştırıldı.
+
+### COMPLETED
+
+- İş emri durum makinesi (`NEW → SCHEDULED/ASSIGNED → EN_ROUTE → ARRIVED →
+  IN_PROGRESS → ON_HOLD/COMPLETED → INVOICED → PAID`, her durumdan
+  `CANCELLED`'a) `jobs.service.ts` içinde sabit bir geçiş tablosuyla
+  uygulandı; `hold`/`cancel` için neden zorunlu.
+- Tenant-scoped CRUD, arama/filtre/sayfalama, atama (`JobAssignment`,
+  primary/secondary), not (`JobNote`), durum geçmişi (`JobStatusHistory`) ve
+  her mutasyonda `AuditService` üzerinden audit kaydı.
+- Optimistic concurrency (`version` alanı, `updateMany` + count kontrolü) ve
+  create akışında plan entitlement/kota kontrolü (`operations.jobs`).
+- Employee/Skill temel modülü: `EmployeeProfile` CRUD, beceri kataloğu
+  (`Skill`/`EmployeeSkill`), teknisyen konum kaydı (`TechnicianLocation`).
+
+### KISMEN TAMAMLANMIŞ / BAŞLAMAMIŞ
+
+- **Recurring generation** ve **servis sözleşmesi/SLA** (Faz 5 kabul ölçütü
+  ve ADR-007'de tanımlı): şemada karşılık gelen bir model
+  (`ServiceAgreement`, tekrar şablonu, generation ledger) yok, servis
+  katmanında da hiçbir iz yok. Bu kapsam **hiç başlamadı**.
+- **Geçiş testleri**: jobs modülüne özel hiçbir unit/integration testi yok.
+  Tek ilgili test, `tests/e2e/foundation.spec.ts` içindeki "creates a job and
+  opens its workflow history" — gerçek API'ye karşı değil, `page.route` ile
+  mock'lanmış bir Playwright senaryosu.
+- `WorkSchedule` ve `TimeEntry` modelleri şemada var ama hiçbir
+  service/controller onları kullanmıyor; sadece şema iskeleti.
+- `employees` modülünde diğer modüllerdeki `*.schemas.ts` konvansiyonu yok;
+  Zod şemaları doğrudan `employees.controller.ts` içinde tanımlı.
+
+### FILES (mevcut durum)
+
+- `apps/api/src/jobs/{jobs.controller.ts,jobs.module.ts,jobs.schemas.ts,jobs.service.ts}`
+- `apps/api/src/employees/{employees.controller.ts,employees.module.ts,employees.service.ts}`
+- `packages/database/prisma/migrations/20260914125354_jobs`
+- `packages/domain/src/index.ts` (`JOB_*`, `EMPLOYEE_*` izinleri)
+
+### DATABASE
+
+- `Job`, `JobAssignment`, `JobStatusHistory`, `JobNote` —
+  `20260914125354_jobs` migration'ı.
+- `EmployeeProfile`, `Skill`, `EmployeeSkill`, `WorkSchedule`,
+  `TechnicianLocation`, `TimeEntry` — `20260915122624_field_service_operations`
+  migration'ı içinde. **Not**: bu tek migration aynı zamanda Faz 7-12
+  kapsamındaki `Quote`, `Invoice`, `Payment`, `StockMovement`,
+  `ServiceReport`, `PortalAccessGrant`, `IntegrationSetting`,
+  `AutomationRule` tablolarını da önceden oluşturuyor; bu modüllerin
+  hiçbirinde henüz service/controller/schema dosyası yok — şema ileri fazlar
+  için önceden hazırlanmış, kod karşılığı henüz yazılmadı.
+
+### TEST RESULTS (17.09.2026, gerçekten çalıştırıldı)
+
+- `pnpm lint`: **BAŞARISIZ** — `packages/database/peek.mjs:13` içinde
+  önceden var olan `no-undef` (`console`) hatası. Bu dosya bu faz kapsamında
+  eklenmedi, ama `main` üzerinde lint şu anda kırmızı.
+- `pnpm typecheck`: 7/7 Turbo görevi geçti.
+- `pnpm test` (Vitest): 9 testten 8'i geçti, 1'i başarısız —
+  `apps/api/test/auth.integration.test.ts` içindeki `applyMigrations()`
+  fonksiyonunun migration listesi `20260915122624_field_service_operations`
+  migration'ını içermiyor; test veritabanında `CustomerAddress.latitude`
+  kolonu oluşmuyor ve müşteri adresi oluşturma senaryosu `500 (P2022)` ile
+  başarısız oluyor. Bu, Faz 6 migration'ı eklenirken entegrasyon testi
+  harness'inin güncellenmediğini gösteriyor.
+- `pnpm build` ve `pnpm test:e2e` bu tur çalıştırılmadı (kapsam dokümantasyon
+  güncellemesiydi, kod değişmedi); yukarıdaki `lint`/`test` başarısızlıkları
+  zaten gate'i açık tutuyor.
+
+### KNOWN ISSUES
+
+- CI şu anda `main` üzerinde kırmızı: hem `pnpm lint` hem `pnpm test`
+  başarısız.
+- Jobs/Employees modülleri için gerçek unit veya entegrasyon testi yok.
+- Recurring generation ve servis sözleşmesi/SLA kapsamı hiç başlamadı.
+
+### NEXT PHASE
+
+- Faz 6 raporu aşağıda. Faz 5'in gate'i açık: lint/test kırmızı ve
+  recurring/SLA kapsamı eksik olduğu sürece Faz 7'ye (Quotes) resmi olarak
+  geçilmemeli.
+
+## PHASE: 6
+
+### STATUS
+
+PARTIALLY IMPLEMENTED — GATE NOT PASSED. Aynı 17.09.2026 taramasının parçası;
+`apps/api/src/dispatch` ve `packages/domain/src/dispatch.ts` okunarak Faz 6
+kabul ölçütünün maddeleriyle tek tek karşılaştırıldı.
+
+### COMPLETED
+
+- Açıklanabilir aday skorlaması: `packages/domain/src/dispatch.ts` içinde
+  saf fonksiyonlar (`scoreCandidate`/`rankCandidates`) beceri (%50), mesafe
+  (%30) ve müsaitlik (%20) ağırlıklı bir kompozit skor ve kısa bir `reason`
+  metni üretiyor.
+- `GET .../dispatch/jobs/:jobId/candidates` (en iyi 5 aday) ve
+  `POST .../dispatch/jobs/:jobId/assign` uçları; `AccessTokenGuard` +
+  `TenantGuard`, `dispatch.read`/`dispatch.assign` izinleri ve
+  `operations.dispatch` entitlement kontrolü.
+- Web tarafında `apps/web/components/dispatch.tsx` — aday listesi ve atama
+  akışı.
+
+### KISMEN TAMAMLANMIŞ / BAŞLAMAMIŞ (kabul ölçütüyle madde madde karşılaştırma)
+
+Faz 6 kabul ölçütü: "Gün/hafta/ay, drag/drop, optimistic conflict,
+kapasite/seyahat, açıklanabilir skor ve provider map."
+
+- **Açıklanabilir skor**: VAR.
+- **Gün/hafta/ay takvim görünümü**: YOK — ne API'de ne web'de bir
+  takvim/zaman çizelgesi uç noktası veya bileşeni bulunamadı.
+- **Drag/drop yeniden planlama**: YOK.
+- **Optimistic conflict**: Job güncellemesinde genel bir `version` alanı var
+  (Faz 5), ama dispatch'e özgü bir conflict senaryosu ele alınmıyor;
+  `dispatch.service.ts assignJob()` versiyon kontrolü yapmadan doğrudan
+  `jobAssignment.create` çağırıyor.
+- **Kapasite/seyahat**: Kısmi — `distanceScore` düz coğrafi (Öklid benzeri)
+  bir yaklaşım, gerçek seyahat süresi/trafik hesaplamıyor. Ayrıca
+  `dispatch.service.ts suggestCandidates()` içinde aday koordinatları hep
+  `latitude: undefined, longitude: undefined` olarak gönderiliyor —
+  `TechnicianLocation` tablosundan gerçek konum hiç okunmuyor, yani mesafe
+  skoru pratikte her zaman varsayılan (50) dönüyor.
+- **Provider map**: YOK — hiçbir harita sağlayıcı entegrasyonu yok (bkz.
+  `docs/implementation-plan.md` riskler: "Harita/ödeme/e-belge credential
+  yok").
+- **Ek bulgu (veri bütünlüğü)**: `employees.controller.ts recordLocation()`
+  route parametresi olan `employeeId`'yi (`EmployeeProfile.id`) doğrudan
+  `employees.service.ts recordLocation()`'ın beklediği `memberId`
+  (`OrganizationMember.id`) parametresine geçiriyor; bu iki alan farklı
+  olduğundan `TechnicianLocation.memberId` yanlış değerle kaydedilebilir. Bu
+  veri şu an dispatch skorlamasında okunmadığı için sonucu etkilemiyor ama
+  düzeltilmesi gerekiyor.
+- `dispatch` modülünde de `employees` gibi ayrı bir `*.schemas.ts` dosyası
+  yok; Zod şeması controller içinde.
+
+### FILES (mevcut durum)
+
+- `apps/api/src/dispatch/{dispatch.controller.ts,dispatch.module.ts,dispatch.service.ts}`
+- `packages/domain/src/dispatch.ts`
+- `apps/web/components/dispatch.tsx`
+
+### DATABASE
+
+- `TechnicianLocation` — `20260915122624_field_service_operations`
+  migration'ı (bkz. Faz 5 notu: aynı migration Faz 7-12 tablolarını da
+  içeriyor).
+
+### TEST RESULTS
+
+- Faz 5 ile aynı çalıştırma (17.09.2026): dispatch'e özel hiçbir
+  unit/integration/E2E testi yok; `scoreCandidate`/`rankCandidates` de dahil
+  hiçbir dispatch fonksiyonu test edilmiyor.
+
+### KNOWN ISSUES
+
+- Takvim/drag-drop/optimistic-conflict/provider map hiç başlamadı; Faz 6
+  kabul ölçütünün yalnızca "aday önerisi + atama" ve "açıklanabilir skor"
+  kısımları tamamlandı.
+- `recordLocation` parametre karışıklığı (yukarıda) düzeltilmeli.
+- Dispatch skorlaması gerçek teknisyen konumunu kullanmıyor.
+- Faz 5'teki lint/test kırmızı durumu Faz 6'yı da kapsıyor (aynı `pnpm
+  test`/`pnpm lint` çalıştırması).
+
+### NEXT PHASE
+
+- Faz 5 ve Faz 6'nın açık gate'leri (lint/test kırmızı, recurring/SLA,
+  takvim/drag-drop/provider map, test kapsamı) kapatılmadan Faz 7'ye
+  (Quotes) resmi olarak geçilmemeli. Şemanın `20260915122624_field_service_operations`
+  migration'ı ile Faz 7-12 tablolarının önceden oluşturulmuş olması bu sıra
+  ilkesini değiştirmez — şema hazır olması, o fazın tamamlandığı anlamına
+  gelmez.
