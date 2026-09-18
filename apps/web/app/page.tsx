@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   Bell,
@@ -188,9 +188,13 @@ export default function Home() {
     );
   }, []);
 
+  const loadedOrganizationId = useRef<string | null>(null);
   useEffect(() => {
     if (!organizationId) return;
-    setWorkspace(null);
+    if (loadedOrganizationId.current !== organizationId) {
+      setWorkspace(null);
+      loadedOrganizationId.current = organizationId;
+    }
     setWorkspaceError("");
     localStorage.setItem("sahaflow-organization", organizationId);
     void fetch(`/api/v1/organizations/${organizationId}/workspace`, {
