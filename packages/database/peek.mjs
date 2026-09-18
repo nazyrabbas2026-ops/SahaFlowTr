@@ -1,3 +1,4 @@
+import console from "node:console";
 import { PrismaClient } from "@prisma/client";
 
 const p = new PrismaClient();

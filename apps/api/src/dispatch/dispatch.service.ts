@@ -28,12 +28,28 @@ export class DispatchService {
       },
     });
 
+    const recentLocations = await this.db.technicianLocation.findMany({
+      where: {
+        organizationId,
+        memberId: { in: employees.map((emp) => emp.memberId) },
+      },
+      orderBy: { recordedAt: "desc" },
+      select: { memberId: true, latitude: true, longitude: true },
+    });
+    const lastKnownLocation = new Map<
+      string,
+      { latitude: number; longitude: number }
+    >();
+    for (const location of recentLocations)
+      if (!lastKnownLocation.has(location.memberId))
+        lastKnownLocation.set(location.memberId, location);
+
     const candidates: DispatchCandidate[] = employees.map((emp) => ({
       memberId: emp.memberId,
       name: emp.member.user.name,
       skills: emp.skills.map((s) => ({ skillId: s.skillId, level: s.level })),
-      latitude: undefined,
-      longitude: undefined,
+      latitude: lastKnownLocation.get(emp.memberId)?.latitude,
+      longitude: lastKnownLocation.get(emp.memberId)?.longitude,
       workLatencyMinutes: emp.workLatencyMinutes,
       availableMinutes: job.estimatedDurationMinutes ?? 0,
     }));

@@ -109,15 +109,19 @@ export class EmployeesService {
 
   async recordLocation(
     organizationId: string,
-    memberId: string,
+    employeeId: string,
     latitude: number,
     longitude: number,
     jobId?: string,
   ) {
+    const employee = await this.db.employeeProfile.findUniqueOrThrow({
+      where: { organizationId_id: { organizationId, id: employeeId } },
+      select: { memberId: true },
+    });
     return this.db.technicianLocation.create({
       data: {
         organizationId,
-        memberId,
+        memberId: employee.memberId,
         latitude,
         longitude,
         jobId,
@@ -126,9 +130,13 @@ export class EmployeesService {
     });
   }
 
-  async getRecentLocation(organizationId: string, memberId: string) {
+  async getRecentLocation(organizationId: string, employeeId: string) {
+    const employee = await this.db.employeeProfile.findUniqueOrThrow({
+      where: { organizationId_id: { organizationId, id: employeeId } },
+      select: { memberId: true },
+    });
     return this.db.technicianLocation.findFirst({
-      where: { organizationId, memberId },
+      where: { organizationId, memberId: employee.memberId },
       orderBy: { recordedAt: "desc" },
     });
   }
