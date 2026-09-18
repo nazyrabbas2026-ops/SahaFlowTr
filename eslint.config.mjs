@@ -5,6 +5,8 @@ export default ts.config(
     ignores: [
       "**/dist/**",
       "**/.next/**",
+      // Smoke paketinin ayrı build çıktısı (bkz. playwright.smoke.config.ts).
+      "**/.next-smoke/**",
       "**/node_modules/**",
       "**/next-env.d.ts",
     ],

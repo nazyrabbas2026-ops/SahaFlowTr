@@ -57,6 +57,20 @@ pnpm test:e2e
 
 `pnpm test`, tüm migration'ları geçici gerçek PostgreSQL 18 üzerinde uygulayıp auth, RBAC, tenant isolation, müşteri 360, audit, optimistic update ve refresh replay senaryolarını da çalıştırır. Prisma şema güncellemesinde migration oluşturun; yalnızca client generate etmek yeterli değildir.
 
+## Gerçek stack smoke testi
+
+```powershell
+pnpm test:smoke
+```
+
+`pnpm test:e2e` paketindeki senaryolar API yanıtlarını `page.route` ile mock'lar; bu, tarayıcının gönderdiği gövde ile API'nin kabul ettiği gövdenin ayrışmasını **yapısal olarak göremez** (gerçek bir örnek: `createCustomerSchema` boş bırakılan telefon/e-posta için `null` kabul etmiyordu, form ise `null` gönderiyordu; mock'lu test yeşil kalmıştı).
+
+`pnpm test:smoke` bu boşluğu kapatır: hiçbir mock kullanmaz, kendi geçici PostgreSQL'ini kurup migration'ları uygular, gerçek API'yi (port 4100) ve gerçek web sunucusunu (port 3200) başlatır, senaryo bitince veritabanını siler. Geliştirme sunucularından (3000/4000) ve mock'lu e2e paketinden (3100) bağımsızdır; `pnpm dev:database`'in çalışıyor olmasına gerek yoktur ve yerel `.local/postgres` verisine dokunmaz. Yeni bir migration eklendiğinde ayrıca bir listeye eklemek gerekmez, migration klasörü sırayla okunur.
+
+Paket henüz CI'da çalışmıyor (CI adımları için `.github/workflows/ci.yml`); yeni bir uçtan uca akış eklerken yerelde çalıştırın.
+
+Not: Next.js `apps/web/next-env.d.ts` dosyasını kendisi üretir ve son çalışan build'in çıktı klasörünü yazar; `pnpm test:smoke` sonrası bu dosya değişmiş görünebilir. Bu değişiklik commit edilmez, `git checkout -- apps/web/next-env.d.ts` ile geri alınır.
+
 Plan: [docs/implementation-plan.md](docs/implementation-plan.md). Ürün referansı ve boşluk analizi: [docs/product-reference-gap-analysis.md](docs/product-reference-gap-analysis.md). Faz sonuçları: [docs/phase-reports.md](docs/phase-reports.md).
 
 ## Tarayıcı doğrulaması

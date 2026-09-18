@@ -9,3 +9,4 @@ coverage/
 test-results/
 .local/
 .codex-*.log
+.next-smoke/

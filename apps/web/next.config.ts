@@ -2,6 +2,9 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   allowedDevOrigins: ["127.0.0.1"],
+  // Smoke paketi kendi build çıktısını ayrı bir klasöre yazar; aksi hâlde
+  // çalışan `next dev` sunucusunun `.next` dizinini bozar.
+  distDir: process.env.NEXT_DIST_DIR ?? ".next",
   async rewrites() {
     return [
       {

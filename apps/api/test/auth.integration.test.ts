@@ -334,6 +334,26 @@ describe("auth, organization and tenant isolation", () => {
       .expect(201);
     const customerB = createdB.body.id as string;
 
+    // Web formu boş bırakılan iletişim alanlarını `null` gönderir; create
+    // şeması bir dönem yalnızca `undefined` kabul ettiği için bu istek 400
+    // dönüyordu ve müşteri oluşturma gerçek API'ye karşı kırıktı.
+    const blankContact = await ownerA
+      .post(`/api/v1/organizations/${organizationA}/customers`)
+      .send({
+        type: "INDIVIDUAL",
+        firstName: "Boş",
+        lastName: "İletişim",
+        primaryPhone: null,
+        alternatePhone: null,
+        email: null,
+        tags: [],
+      })
+      .expect(201);
+    expect(blankContact.body).toMatchObject({
+      primaryPhone: null,
+      email: null,
+    });
+
     const list = await ownerA
       .get(`/api/v1/organizations/${organizationA}/customers`)
       .query({ search: "Deniz", type: "INDIVIDUAL", page: 1, pageSize: 10 })
