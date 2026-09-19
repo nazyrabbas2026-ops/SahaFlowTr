@@ -31,6 +31,7 @@ async function applyMigrations() {
     "20260918105223_service_agreements",
     "20260919112455_money_bigint_vat_bps",
     "20260919114244_catalog_item_version",
+    "20260919121520_service_package_families",
   ]) {
     const sql = await readFile(
       resolve(
@@ -823,5 +824,207 @@ describe("auth, organization and tenant isolation", () => {
       .expect(200);
     expect(searched.body.items).toHaveLength(1);
     expect(searched.body.pagination).toMatchObject({ page: 1, total: 1 });
+  });
+
+  it("shares family lines across tiers while keeping package-specific lines", async () => {
+    const owner = request.agent(app.getHttpServer());
+    const intruder = request.agent(app.getHttpServer());
+    const registration = await owner
+      .post("/api/v1/auth/register")
+      .set("X-Forwarded-For", "198.51.100.41")
+      .send({
+        name: "Paket Sahibi",
+        email: "package-owner@example.com",
+        password: "GuvenliParola2050",
+        organizationName: "Paket Organizasyonu",
+      })
+      .expect(201);
+    const intruderRegistration = await intruder
+      .post("/api/v1/auth/register")
+      .set("X-Forwarded-For", "198.51.100.42")
+      .send({
+        name: "Yabancı Sahip",
+        email: "package-intruder@example.com",
+        password: "GuvenliParola2051",
+        organizationName: "Yabancı Organizasyon",
+      })
+      .expect(201);
+    const organizationId = registration.body.organizations[0].id as string;
+    const intruderOrganizationId = intruderRegistration.body.organizations[0]
+      .id as string;
+    const base = `/api/v1/organizations/${organizationId}`;
+    const families = `${base}/service-package-families`;
+    const packages = `${base}/service-packages`;
+
+    const filter = await owner
+      .post(`${base}/catalog-items`)
+      .send({
+        sku: "filtre",
+        name: "Klima filtresi",
+        category: "Yedek parça",
+        listPriceMinor: "25000",
+      })
+      .expect(201);
+    const gas = await owner
+      .post(`${base}/catalog-items`)
+      .send({
+        sku: "gaz",
+        name: "Gaz dolumu",
+        kind: "SERVICE",
+        category: "Servis",
+        listPriceMinor: "80000",
+      })
+      .expect(201);
+
+    const family = await owner
+      .post(families)
+      .send({ key: "klima-bakim", name: "Klima bakımı" })
+      .expect(201);
+    const familyId = family.body.id as string;
+    expect(family.body.key).toBe("KLIMA-BAKIM");
+
+    // Seviye yalnızca aile içinde anlamlıdır; ailesiz seviye reddedilmeli.
+    await owner
+      .post(packages)
+      .send({
+        key: "yalniz-premium",
+        name: "Ailesiz premium",
+        tier: "PREMIUM",
+        priceMinor: "10000",
+      })
+      .expect(409);
+
+    const economy = await owner
+      .post(packages)
+      .send({
+        key: "bakim-ekonomik",
+        name: "Ekonomik bakım",
+        familyId,
+        tier: "ECONOMY",
+        priceMinor: "100000",
+      })
+      .expect(201);
+    const economyId = economy.body.id as string;
+
+    // Ortak satır önce tanımlanır; sonradan eklenen paket onu devralmalı.
+    const withShared = await owner
+      .put(`${families}/${familyId}/shared-items`)
+      .send({
+        version: 1,
+        items: [{ catalogItemId: filter.body.id, quantity: "2", addon: false }],
+      })
+      .expect(200);
+    expect(withShared.body.packages[0].items).toHaveLength(1);
+    expect(withShared.body.packages[0].items[0]).toMatchObject({
+      catalogItemId: filter.body.id,
+      shared: true,
+    });
+
+    const premium = await owner
+      .post(packages)
+      .send({
+        key: "bakim-premium",
+        name: "Premium bakım",
+        familyId,
+        tier: "PREMIUM",
+        priceMinor: "250000",
+      })
+      .expect(201);
+    expect(premium.body.items).toHaveLength(1);
+    expect(premium.body.items[0].shared).toBe(true);
+
+    // Aynı seviye aile içinde ikinci kez kullanılamaz.
+    await owner
+      .post(packages)
+      .send({
+        key: "bakim-premium-2",
+        name: "İkinci premium",
+        familyId,
+        tier: "PREMIUM",
+        priceMinor: "300000",
+      })
+      .expect(409);
+
+    // Pakete özel satır eklemek ortak satırı silmemeli.
+    const withOwn = await owner
+      .put(`${packages}/${premium.body.id}/items`)
+      .send({
+        version: premium.body.version,
+        items: [{ catalogItemId: gas.body.id, quantity: "1", addon: true }],
+      })
+      .expect(200);
+    expect(withOwn.body.items).toHaveLength(2);
+    expect(
+      withOwn.body.items.find(
+        (item: { catalogItemId: string }) =>
+          item.catalogItemId === filter.body.id,
+      ).shared,
+    ).toBe(true);
+    expect(
+      withOwn.body.items.find(
+        (item: { catalogItemId: string }) => item.catalogItemId === gas.body.id,
+      ),
+    ).toMatchObject({ shared: false, addon: true });
+
+    // Ortak satır listesi değişince ekonomik paket de güncellenmeli, pakete
+    // özel satır yerinde kalmalı.
+    const detail = await owner.get(`${families}/${familyId}`).expect(200);
+    await owner
+      .put(`${families}/${familyId}/shared-items`)
+      .send({
+        version: detail.body.version,
+        items: [
+          { catalogItemId: filter.body.id, quantity: "3", addon: false },
+          { catalogItemId: gas.body.id, quantity: "1", addon: false },
+        ],
+      })
+      .expect(200);
+    const afterShared = await owner.get(`${families}/${familyId}`).expect(200);
+    const economyAfter = afterShared.body.packages.find(
+      (item: { id: string }) => item.id === economyId,
+    );
+    expect(economyAfter.items).toHaveLength(2);
+    expect(
+      economyAfter.items.every((item: { shared: boolean }) => item.shared),
+    ).toBe(true);
+
+    // Aynı katalog kalemi hem ortak hem pakete özel olamaz.
+    const premiumDetail = await owner
+      .get(`${packages}/${premium.body.id}`)
+      .expect(200);
+    await owner
+      .put(`${packages}/${premium.body.id}/items`)
+      .send({
+        version: premiumDetail.body.version,
+        items: [{ catalogItemId: filter.body.id, quantity: "1", addon: false }],
+      })
+      .expect(409);
+
+    // Eski sürümle güncelleme çakışmalı.
+    await owner
+      .patch(`${packages}/${economyId}`)
+      .send({ version: 1, name: "Eski sürüm" })
+      .expect(409);
+
+    const archived = await owner.delete(`${packages}/${economyId}`).expect(200);
+    expect(archived.body.active).toBe(false);
+    const restored = await owner
+      .post(`${packages}/${economyId}/restore`)
+      .expect(201);
+    expect(restored.body.active).toBe(true);
+
+    // Başka tenant ne okuyabilmeli ne yazabilmeli.
+    await intruder
+      .get(
+        `/api/v1/organizations/${intruderOrganizationId}/service-package-families/${familyId}`,
+      )
+      .expect(404);
+    await intruder.get(families).expect(403);
+    await intruder
+      .put(
+        `/api/v1/organizations/${intruderOrganizationId}/service-packages/${economyId}/items`,
+      )
+      .send({ version: 1, items: [] })
+      .expect(404);
   });
 });

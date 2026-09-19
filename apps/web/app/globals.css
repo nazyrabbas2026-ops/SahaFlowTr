@@ -1934,3 +1934,40 @@ th {
   margin: 0;
   padding: 0;
 }
+
+/* Paket ailesi detayında üç seviye yan yana; dar ekranda alt alta iner. */
+.package-tier-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+.package-price {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.package-compare {
+  display: block;
+  opacity: 0.75;
+}
+.package-line-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.package-line-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.package-line-list li > span {
+  display: grid;
+}
+@media (max-width: 1100px) {
+  .package-tier-grid {
+    grid-template-columns: 1fr;
+  }
+}

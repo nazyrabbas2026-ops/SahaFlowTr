@@ -977,3 +977,98 @@ pasife alma/geri alma ve liste filtresi.
 
 PR 3 — ServicePackage + paket kalemleri (paket/add-on yapısı, kataloğa bağlı
 satırlar, `ServicePackageItem.packageName` ölü alan temizliği).
+
+## PHASE: 7 — PR 3 (servis paketleri)
+
+### STATUS
+
+DEVAM EDİYOR. [Faz 7–10 uygulama planı](phase-7-10-plan.md) içindeki PR 3
+tamamlandı; sıradaki iş PR 4 (Quote CRUD + satır hesaplama). Faz 7 kabul ölçütü
+hâlâ açık.
+
+### COMPLETED
+
+- `ServicePackageFamily` eklendi: aynı hizmetin Ekonomik/Önerilen/Premium
+  seviyelerini bir arada tutar. Paket `tier` alanıyla seviyesini taşır ve bir
+  ailede her seviyeden yalnızca bir paket olabilir.
+- Ortak satırlar aile ucundan yönetilir ve ailedeki her pakete `shared = true`
+  olarak yazılır; pakete özel satırlar `shared = false` kalır ve aile
+  düzenlemesinden etkilenmez. Tasarım kararı ve bedeli planın 2.6 bölümünde.
+- Aileye sonradan eklenen paket ortak satırları oluşturulurken devralır; aksi
+  hâlde aile bir daha düzenlenene kadar eksik satırlarla kalırdı.
+- Ortak satır listesi değişince ailedeki paketlerin `version` alanı da artar:
+  paketin içeriği değişmiştir ve elinde eski kopyayı tutan istemci çakışma
+  almalıdır.
+- `ServicePackageItem.packageName` düşürüldü. Ölü olduğu teyit edildi: yalnızca
+  şemada ve onu oluşturan migration'da geçiyordu, hiçbir kod okumuyor veya
+  yazmıyordu ve ilişki üzerinden erişilebilen `ServicePackage.name`'in
+  kopyasıydı.
+- Fiyatlar PR 1'deki `BigInt` kuruş ve `vatRateBps` yapısını kullanır.
+- Web tarafında paket yönetim ekranı: aile listesi, üç seviyeyi yan yana
+  gösteren detay görünümü, ortak satır ve pakete özel satır düzenleyicileri,
+  paket formu ve pasife alma/geri alma.
+
+### FILES CHANGED
+
+- `apps/api/src/service-packages/{service-packages.module,service-packages.controller,service-package-families.controller,service-packages.service,service-packages.schemas}.ts` (yeni)
+- `apps/api/src/app.module.ts`, `packages/domain/src/index.ts`
+- `packages/database/prisma/schema.prisma`
+- `packages/database/prisma/migrations/20260919121520_service_package_families/migration.sql` (yeni)
+- `apps/web/components/service-packages.tsx`, `service-packages.helpers.ts`, `service-packages.helpers.test.ts` (yeni)
+- `apps/web/app/page.tsx`, `apps/web/app/globals.css`
+- `apps/api/test/auth.integration.test.ts`, `docs/phase-7-10-plan.md`
+
+### DATABASE
+
+`20260919121520_service_package_families`: `ServicePackageTier` enum'u ve
+`ServicePackageFamily` tablosu eklendi; `ServicePackage`'a `familyId`, `tier` ve
+`version`, `ServicePackageItem`'a `shared` eklendi, `packageName` düşürüldü.
+`(organizationId, familyId, tier)` unique kısıtı bir ailede aynı seviyeden iki
+paketi engeller. Aile ilişkisi composite `(organizationId, familyId)` foreign
+key ile bağlıdır (ADR-002). Geriye dönük uyumlu, backfill gerekmiyor; tablolar
+boş ve düşürülen sütunu okuyan kod yok.
+
+### API
+
+`/api/v1/organizations/:organizationId/service-package-families` altında `GET`,
+`POST`, `GET /:familyId`, `PATCH /:familyId` ve `PUT /:familyId/shared-items`.
+`/api/v1/organizations/:organizationId/service-packages` altında `GET`, `POST`,
+`GET /:packageId`, `PATCH /:packageId`, `PUT /:packageId/items`,
+`DELETE /:packageId` ve `POST /:packageId/restore`. Tümü `quote.read` /
+`quote.manage` izinleri ve `sales.quotes` entitlement'ı arkasında. Satır
+listeleri kısmi güncelleme yerine bütün olarak değiştirilir; tek transaction
+içinde tutarlı kalmaları için.
+
+### TEST RESULTS (19.09.2026, gerçekten çalıştırıldı)
+
+Ön kontrol: test portlarının (5432/55432/55433) boş olduğu doğrulandı.
+`pnpm db:generate` OK, `pnpm lint` temiz, `pnpm typecheck` 7/7,
+`pnpm test` 96/96, `pnpm build` 5/5, `pnpm test:e2e` 14/14,
+`pnpm test:smoke` 1/1 (11 migration uygulandı).
+
+Yeni testler: 11 web helper birim testi (satır sıralaması, add-on hariç satır
+toplamı, satır yokken uydurma indirim oranı üretmeme) ve gerçek PostgreSQL
+üzerinde bir entegrasyon senaryosu — ortak satırın tüm seviyelere yayılması,
+sonradan eklenen paketin devralması, pakete özel satırın korunması, aynı
+katalog kaleminin hem ortak hem pakete özel olamaması, ailesiz seviye ve aynı
+seviyenin ikinci kez kullanılmasında 409, optimistic çakışma, arşivle/geri al
+ve cross-tenant 404/403.
+
+Doğrulama sırasında iki gerçek hata çıktı ve düzeltildi: iç içe `createMany`
+composite ilişkinin `organizationId` alanını kabul etmediği için aileye paket
+eklemek 500 dönüyordu; ortak satır listesi değiştiğinde paket sürümü
+artmadığı için eski kopyayla yapılan güncelleme çakışma vermiyordu. Aynı
+seviyenin ikinci kez kullanılması da veritabanı kısıtına bırakılmak yerine
+serviste kontrol edilip 409'a çevrildi; kısıt ihlali istemciye 500 dönüyordu.
+
+### KNOWN ISSUES
+
+- Paket ekranı için Playwright E2E senaryosu yok; kapsam entegrasyon testi ve
+  helper birim testleriyle sınırlı tutuldu.
+- Aile pasife alma/geri alma ucu yok; aile `PATCH` ile `active` alanı üzerinden
+  güncelleniyor. Paketlerde ayrı archive/restore uçları var.
+
+### NEXT PHASE
+
+PR 4 — Quote CRUD + satır hesaplama (`QuoteOption` migration'ı, satır ve opsiyon
+toplamları, `OrganizationSequence` ile teklif numarası, web teklif editörü).
