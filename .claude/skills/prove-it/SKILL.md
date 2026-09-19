@@ -1,13 +1,14 @@
 ---
 name: prove-it
-description: SahaFlowTr'de bir işi tamamlandı saymadan önce zorunlu doğrulama aşaması — CI'daki gerçek sırayla db:generate/lint/typecheck/test/build/test:e2e çalıştırma ve migration adlandırma kontrolü. Kod değişikliği bittiğinde, commit/PR atmadan önce kullan.
+description: SahaFlowTr'de bir işi tamamlandı saymadan önce zorunlu doğrulama aşaması — artık süreç temizliği, CI'daki gerçek sırayla db:generate/lint/typecheck/test/build/test:e2e/test:smoke çalıştırma ve migration adlandırma kontrolü. Kod değişikliği bittiğinde, commit/PR atmadan önce kullan.
 ---
 
 # prove-it (Kanıtla)
 
 SahaFlowTr dört aşamalı akışın üçüncü adımı. **Bu adım geçilmeden hiçbir iş
 "tamamlandı" olarak raporlanmaz.** `.github/workflows/ci.yml` içindeki
-`foundation` job'ının adımlarını aynı sırayla, yerelde çalıştır:
+`foundation` job'ının adımlarını aynı sırayla, yerelde çalıştır — ayrıca
+CI'da bulunmayan `pnpm test:smoke` de bu aşamanın parçasıdır:
 
 ```powershell
 pnpm db:generate
@@ -17,6 +18,34 @@ pnpm test
 pnpm build
 pnpm exec playwright install --with-deps chromium   # sadece ilk kurulumda / eksikse
 pnpm test:e2e
+pnpm test:smoke
+```
+
+## 0. Ön kontrol: artık süreçleri temizle
+
+Testleri çalıştırmadan **önce** test portlarını tutan artık süreç var mı bak;
+varsa öldür:
+
+```powershell
+netstat -ano | Select-String ":5432|:55432|:55433"
+Get-Process postgres, node -ErrorAction SilentlyContinue | Select-Object Id, ProcessName
+```
+
+- `55432` — `apps/api/test/auth.integration.test.ts` içindeki gömülü PostgreSQL.
+- `55433` — `tests/smoke` paketinin gömülü PostgreSQL'i.
+- `5432` — `pnpm dev:database` ile başlatılan yerel geliştirme veritabanı.
+
+Gerekçe: yarıda kesilen bir test veya `dev:database` koşumunda node süreci
+ölse de gömülü PostgreSQL çocuk süreci hayatta kalıp portu tutmaya devam
+ediyor. Sonraki koşumda `beforeAll` hook'u veritabanını başlatamıyor, hata
+vermek yerine `hookTimeout` (180 sn) dolana kadar bekliyor, ardından
+`afterAll` de aynı süre boyunca takılıyor. Sonuç: testler hiçbir çıktı
+vermeden dakikalarca asılı kalıyor ve gerçek bir kod hatasıyla karıştırılması
+kolay. Bu oturumda tekrar tekrar yaşandı ve her seferinde yaklaşık on dakika
+kaybettirdi. Temizlik için:
+
+```powershell
+Get-Process postgres -ErrorAction SilentlyContinue | Stop-Process -Force
 ```
 
 ## Sıra ve gerekçe
@@ -37,6 +66,14 @@ pnpm test:e2e
    doğrular. Web veya UI etkileyen bir değişiklik yaptıysan bu adımı atlama;
    sadece backend-only, UI'a dokunmayan bir değişiklikse ve zaman kısıtlıysa
    gerekçesini belirterek atlayabilirsin, ama varsayılan davranış çalıştırmaktır.
+7. **`pnpm test:smoke`** (Playwright, ayrı config) — CI'da yok ama bu aşamanın
+   parçasıdır. Mock kullanmadan gerçek stack'e karşı çalışır: geçici
+   PostgreSQL'e tüm migration'ları uygular, gerçek API ve web süreçlerini
+   ayağa kaldırır. `test:e2e` ağ çağrılarını mock'ladığı için şema ile
+   istemcinin uyuşmadığı hataları göremez; müşteri oluşturmayı kıran
+   create/update şema ayrışması tam olarak bu paketle yakalandı. Migration
+   listesini dizinden okuduğu için yeni migration'ın gerçekten uygulandığını
+   da doğrular.
 
 ## Migration kontrolü
 
