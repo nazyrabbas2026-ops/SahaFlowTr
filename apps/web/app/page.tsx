@@ -28,6 +28,7 @@ import { PanelState, StatusBadge } from "../components/design-system";
 import { Customers } from "../components/customers";
 import { Jobs } from "../components/jobs";
 import { Dispatch } from "../components/dispatch";
+import { Catalog } from "../components/catalog";
 
 const phases = [
   "Mimari ve planlama",
@@ -53,6 +54,7 @@ type Tab =
   | "Müşteriler"
   | "İş Emirleri"
   | "Dispatch"
+  | "Katalog"
   | "Ekip ve Roller"
   | "Sistem Durumu"
   | "Geliştirme Planı";
@@ -248,6 +250,12 @@ export default function Home() {
           icon: Route,
           permission: "employee.read",
           entitlement: "operations.employees",
+        },
+        {
+          label: "Katalog" as Tab,
+          icon: Layers3,
+          permission: "inventory.read",
+          entitlement: "inventory.products",
         },
         {
           label: "Genel Bakış" as Tab,
@@ -639,6 +647,12 @@ export default function Home() {
               )}
               {tab === "Dispatch" && (
                 <Dispatch
+                  organizationId={organizationId}
+                  permissions={permissions}
+                />
+              )}
+              {tab === "Katalog" && (
+                <Catalog
                   organizationId={organizationId}
                   permissions={permissions}
                 />

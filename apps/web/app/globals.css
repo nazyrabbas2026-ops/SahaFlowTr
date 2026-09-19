@@ -1913,3 +1913,24 @@ th {
   color: var(--muted);
   font-size: 9px;
 }
+
+/* Katalog formundaki onay kutuları: .form-field input kuralı tüm girdileri
+   tam genişlik ve 40px yüksekliğe zorluyor, onay kutusu bundan muaf. */
+.checkbox-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  min-height: 40px;
+}
+.checkbox-row label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.checkbox-row input[type="checkbox"] {
+  width: 16px;
+  min-height: 16px;
+  margin: 0;
+  padding: 0;
+}

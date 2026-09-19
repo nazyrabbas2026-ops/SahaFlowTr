@@ -898,3 +898,82 @@ uygulandı).
 
 PR 2 — CatalogItem CRUD (`apps/api/src/catalog`, `inventory.read` /
 `inventory.manage` izinleri, web katalog ekranı).
+
+## PHASE: 7 — PR 2 (fiyat kataloğu CRUD)
+
+### STATUS
+
+DEVAM EDİYOR. [Faz 7–10 uygulama planı](phase-7-10-plan.md) içindeki PR 2
+tamamlandı; sıradaki iş PR 3 (ServicePackage + paket kalemleri). Faz 7 kabul
+ölçütü hâlâ açık.
+
+### COMPLETED
+
+- `apps/api/src/catalog` modülü: liste (arama, tür ve durum filtresi,
+  sayfalama), detay, oluşturma, güncelleme, pasife alma ve geri alma.
+  `AccessTokenGuard` + `TenantGuard`, `inventory.read` / `inventory.manage`
+  izinleri ve `inventory.products` entitlement'ı.
+- SKU tenant içinde tekildir ve büyük harfe normalize edilir; aksi hâlde "abc"
+  ile "ABC" iki ayrı kalem olur ve aynı ürün iki kez fiyatlanırdı. Aynı SKU
+  başka bir tenant'ta serbesttir.
+- Kalem silinmez, pasife alınır: geçmiş teklif, fatura ve stok hareketleri ona
+  referans vermeye devam eder. `customers` modülündeki archive/restore deseni
+  (DELETE + POST `/restore`) birebir tekrarlandı.
+- Kota kontrolü tenant satırı kilitlenerek transaction içinde yapılır; plan
+  limiti (`plan_starter` için 500 kalem) backend-authoritative'dir (ADR-009).
+- Fiyatlar PR 1'deki yapıyı kullanır: `BigInt` kuruş ve `vatRateBps`. Eski
+  `VatRate` enum'una dönüş yok. İstemci tutarı kuruş dizgisi olarak gönderir,
+  `BigIntSerializerInterceptor` aynı biçimde geri döndürür.
+- Web tarafında katalog ekranı: liste, arama/filtre, oluşturma ve düzenleme
+  formu, pasife alma/geri alma. Tutar girişi "1.234,56" biçimini kabul eder ve
+  `number`'a düşmeden kuruşa çevrilir.
+
+### FILES CHANGED
+
+- `apps/api/src/catalog/{catalog.module,catalog.controller,catalog.service,catalog.schemas}.ts` (yeni)
+- `apps/api/src/common/money.schemas.ts` (yeni), `apps/api/src/app.module.ts`
+- `apps/web/components/catalog.tsx`, `catalog.helpers.ts`, `catalog.helpers.test.ts` (yeni)
+- `apps/web/app/page.tsx`, `apps/web/app/globals.css`
+- `packages/domain/src/index.ts`, `packages/database/prisma/schema.prisma`
+- `packages/database/prisma/migrations/20260919114244_catalog_item_version/migration.sql` (yeni)
+- `apps/api/test/auth.integration.test.ts`, `docs/phase-7-10-plan.md`
+
+### DATABASE
+
+`20260919114244_catalog_item_version`: `CatalogItem` tablosuna `version`
+sütunu eklendi. Fiyat birden fazla kullanıcı tarafından düzenlenebildiği için
+güncellemeler optimistic concurrency ile korunuyor; `Customer`, `Job`, `Quote`
+ve `Invoice` ile aynı desen. Geriye dönük uyumlu, backfill gerekmiyor
+(`DEFAULT 1`).
+
+### API
+
+`/api/v1/organizations/:organizationId/catalog-items` altında `GET` (liste),
+`POST` (oluştur), `GET /:catalogItemId`, `PATCH /:catalogItemId`,
+`DELETE /:catalogItemId` (pasife al) ve `POST /:catalogItemId/restore`.
+
+### TEST RESULTS (19.09.2026, gerçekten çalıştırıldı)
+
+`pnpm db:generate` OK, `pnpm lint` temiz, `pnpm typecheck` 7/7,
+`pnpm test` 84/84, `pnpm build` 5/5, `pnpm test:e2e` 14/14,
+`pnpm test:smoke` 1/1 (10 migration uygulandı).
+
+Yeni testler: 10 web helper testi (Türkçe/nokta ayraçlı tutar ayrıştırma,
+güvenli tam sayı aralığının üstünde kayıpsız biçimlendirme) ve gerçek
+PostgreSQL üzerinde bir entegrasyon senaryosu — tenant izolasyonu (başka
+tenant'ın kalemine 404, başka tenant'ın koleksiyonuna 403), SKU tekilliği ve
+büyük/küçük harf normalizasyonu, INTEGER tavanının üstündeki fiyatın kayıpsız
+dönmesi, optimistic çakışmada 409, geçersiz KDV oranı ve tutar biçiminde 400,
+pasife alma/geri alma ve liste filtresi.
+
+### KNOWN ISSUES
+
+- Katalog ekranı için Playwright E2E senaryosu yok; kapsam entegrasyon testi ve
+  helper birim testleriyle sınırlı tutuldu.
+- Sürümlü fiyat kataloğu (PriceBook) bilinçli olarak kapsam dışıdır; gerekçesi
+  [planın 2.5 bölümünde](phase-7-10-plan.md) yazılıdır.
+
+### NEXT PHASE
+
+PR 3 — ServicePackage + paket kalemleri (paket/add-on yapısı, kataloğa bağlı
+satırlar, `ServicePackageItem.packageName` ölü alan temizliği).

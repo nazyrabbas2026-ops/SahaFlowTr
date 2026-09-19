@@ -30,6 +30,7 @@ async function applyMigrations() {
     "20260915122624_field_service_operations",
     "20260918105223_service_agreements",
     "20260919112455_money_bigint_vat_bps",
+    "20260919114244_catalog_item_version",
   ]) {
     const sql = await readFile(
       resolve(
@@ -600,15 +601,19 @@ describe("auth, organization and tenant isolation", () => {
     // Web arayüzü "sonraki üretim dönemi"ni bu alandan okur; hesap backend'de
     // kalsın diye yanıta ekleniyor, istemcide tekrar hesaplanmıyor.
     expect(created.body.nextOccurrence).toEqual(expect.any(String));
-    expect(new Date(created.body.nextOccurrence as string).getTime()).toBeGreaterThan(
-      Date.now(),
-    );
+    expect(
+      new Date(created.body.nextOccurrence as string).getTime(),
+    ).toBeGreaterThan(Date.now());
 
     await other
-      .get(`/api/v1/organizations/${organizationId}/service-agreements/${agreementId}`)
+      .get(
+        `/api/v1/organizations/${organizationId}/service-agreements/${agreementId}`,
+      )
       .expect(403);
     await owner
-      .get(`/api/v1/organizations/${otherOrganizationId}/service-agreements/${agreementId}`)
+      .get(
+        `/api/v1/organizations/${otherOrganizationId}/service-agreements/${agreementId}`,
+      )
       .expect(403);
 
     const firstGenerate = await owner
@@ -636,9 +641,7 @@ describe("auth, organization and tenant isolation", () => {
       .send({ asOf: "2026-03-01T00:00:00.000Z" })
       .expect(201);
     expect(
-      secondGenerate.body.periods.map(
-        (p: { jobId: string }) => p.jobId,
-      ),
+      secondGenerate.body.periods.map((p: { jobId: string }) => p.jobId),
     ).toEqual(
       firstGenerate.body.periods.map((p: { jobId: string }) => p.jobId),
     );
@@ -689,5 +692,136 @@ describe("auth, organization and tenant isolation", () => {
       )
       .send({ asOf: "2026-04-01T00:00:00.000Z" })
       .expect(403);
+  });
+
+  it("keeps catalog items tenant-scoped, unique by SKU and safe under concurrent edits", async () => {
+    const ownerA = request.agent(app.getHttpServer());
+    const ownerB = request.agent(app.getHttpServer());
+    const registrationA = await ownerA
+      .post("/api/v1/auth/register")
+      .set("X-Forwarded-For", "198.51.100.31")
+      .send({
+        name: "Katalog Sahibi A",
+        email: "catalog-owner-a@example.com",
+        password: "GuvenliParola2040",
+        organizationName: "Katalog Organizasyonu A",
+      })
+      .expect(201);
+    const registrationB = await ownerB
+      .post("/api/v1/auth/register")
+      .set("X-Forwarded-For", "198.51.100.32")
+      .send({
+        name: "Katalog Sahibi B",
+        email: "catalog-owner-b@example.com",
+        password: "GuvenliParola2041",
+        organizationName: "Katalog Organizasyonu B",
+      })
+      .expect(201);
+    const organizationA = registrationA.body.organizations[0].id as string;
+    const organizationB = registrationB.body.organizations[0].id as string;
+    const catalogA = `/api/v1/organizations/${organizationA}/catalog-items`;
+    const catalogB = `/api/v1/organizations/${organizationB}/catalog-items`;
+
+    // Parasal alanlar BIGINT kuruştur ve API sınırında dizgiye çevrilir;
+    // INTEGER tavanının (2.147.483.647) üstündeki bir fiyat kayıpsız dönmeli.
+    const created = await ownerA
+      .post(catalogA)
+      .send({
+        sku: "klima-9000",
+        name: "Split Klima 9000 BTU",
+        kind: "PRODUCT",
+        category: "İklimlendirme",
+        listPriceMinor: "3000000000",
+        costPriceMinor: 1_500_000,
+        vatRateBps: 2000,
+        reorderPoint: 3,
+      })
+      .expect(201);
+    expect(created.body).toMatchObject({
+      sku: "KLIMA-9000",
+      listPriceMinor: "3000000000",
+      costPriceMinor: "1500000",
+      vatRateBps: 2000,
+      active: true,
+      version: 1,
+    });
+    const itemId = created.body.id as string;
+
+    // SKU büyük harfe normalize edildiği için farklı yazım aynı kalemdir.
+    await ownerA
+      .post(catalogA)
+      .send({
+        sku: "Klima-9000",
+        name: "Kopya kalem",
+        category: "İklimlendirme",
+        listPriceMinor: "1000",
+      })
+      .expect(409);
+
+    // Aynı SKU başka bir tenant'ta serbesttir.
+    await ownerB
+      .post(catalogB)
+      .send({
+        sku: "KLIMA-9000",
+        name: "Diğer tenant kalemi",
+        category: "İklimlendirme",
+        listPriceMinor: "1000",
+      })
+      .expect(201);
+
+    // Başka tenant'ın kalemine ne okuma ne yazma erişimi olmalı.
+    await ownerB.get(`${catalogB}/${itemId}`).expect(404);
+    await ownerB
+      .patch(`${catalogB}/${itemId}`)
+      .send({ version: 1, name: "Ele geçirildi" })
+      .expect(404);
+    await ownerB.get(catalogA).expect(403);
+
+    const updated = await ownerA
+      .patch(`${catalogA}/${itemId}`)
+      .send({ version: 1, listPriceMinor: "3500000000", vatRateBps: 1000 })
+      .expect(200);
+    expect(updated.body).toMatchObject({
+      listPriceMinor: "3500000000",
+      vatRateBps: 1000,
+      version: 2,
+    });
+
+    // Eski sürümle ikinci güncelleme çakışmalı.
+    await ownerA
+      .patch(`${catalogA}/${itemId}`)
+      .send({ version: 1, name: "Eski sürüm" })
+      .expect(409);
+
+    // Geçersiz KDV oranı ve geçersiz tutar biçimi reddedilmeli.
+    await ownerA
+      .patch(`${catalogA}/${itemId}`)
+      .send({ version: 2, vatRateBps: 10001 })
+      .expect(400);
+    await ownerA
+      .patch(`${catalogA}/${itemId}`)
+      .send({ version: 2, listPriceMinor: "12,50" })
+      .expect(400);
+
+    const archived = await ownerA.delete(`${catalogA}/${itemId}`).expect(200);
+    expect(archived.body.active).toBe(false);
+    const activeOnly = await ownerA
+      .get(catalogA)
+      .query({ status: "ACTIVE" })
+      .expect(200);
+    expect(
+      activeOnly.body.items.some((item: { id: string }) => item.id === itemId),
+    ).toBe(false);
+    const restored = await ownerA
+      .post(`${catalogA}/${itemId}/restore`)
+      .expect(201);
+    expect(restored.body.active).toBe(true);
+
+    const searched = await ownerA
+      .get(catalogA)
+      .query({ search: "klima", kind: "PRODUCT", page: 1, pageSize: 10 })
+      .expect(200);
+    expect(searched.body.items).toHaveLength(1);
+    expect(searched.body.pagination).toMatchObject({ page: 1, total: 1 });
   });
 });
