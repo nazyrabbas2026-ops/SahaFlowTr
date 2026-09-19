@@ -29,6 +29,7 @@ async function applyMigrations() {
     "20260914125354_jobs",
     "20260915122624_field_service_operations",
     "20260918105223_service_agreements",
+    "20260919112455_money_bigint_vat_bps",
   ]) {
     const sql = await readFile(
       resolve(

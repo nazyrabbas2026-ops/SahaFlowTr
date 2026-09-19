@@ -591,13 +591,6 @@ enum QuoteLineKind {
   DISCOUNT
 }
 
-enum VatRate {
-  EXEMPT
-  VAT_ONE
-  VAT_TEN
-  VAT_TWENTY
-}
-
 model Quote {
   id              String             @id @default(cuid())
   organizationId  String
@@ -610,10 +603,10 @@ model Quote {
   validUntil      DateTime
   versionNumber   Int                @default(1)
   parentQuoteId   String?
-  subtotalMinor   Int                @default(0)
-  discountMinor   Int                @default(0)
-  vatMinor        Int                @default(0)
-  totalMinor      Int                @default(0)
+  subtotalMinor   BigInt             @default(0)
+  discountMinor   BigInt             @default(0)
+  vatMinor        BigInt             @default(0)
+  totalMinor      BigInt             @default(0)
   currency        String             @default("TRY")
   terms           String?
   shareTokenHash  String?
@@ -653,11 +646,11 @@ model QuoteLine {
   description    String?
   unit           String        @default("adet")
   quantity       Decimal       @default(1) @db.Decimal(12, 3)
-  unitPriceMinor Int
+  unitPriceMinor BigInt
   discountBps    Int           @default(0)
-  vatRate        VatRate       @default(VAT_TWENTY)
-  lineTotalMinor Int
-  vatMinor       Int
+  vatRateBps     Int           @default(2000)
+  lineTotalMinor BigInt
+  vatMinor       BigInt
   createdAt      DateTime      @default(now())
   organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   quote          Quote         @relation(fields: [organizationId, quoteId], references: [organizationId, id], onDelete: Cascade)
@@ -674,7 +667,7 @@ model QuotePackageLine {
   packageId      String
   position       Int
   quantity       Int            @default(1)
-  priceMinor     Int
+  priceMinor     BigInt
   organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   quote          Quote          @relation(fields: [organizationId, quoteId], references: [organizationId, id], onDelete: Cascade)
   package        ServicePackage @relation(fields: [organizationId, packageId], references: [organizationId, id], onDelete: Restrict)
@@ -689,8 +682,8 @@ model ServicePackage {
   key            String
   name           String
   description    String?
-  priceMinor     Int
-  vatRate        VatRate              @default(VAT_TWENTY)
+  priceMinor     BigInt
+  vatRateBps     Int                  @default(2000)
   active         Boolean              @default(true)
   createdAt      DateTime             @default(now())
   updatedAt      DateTime             @updatedAt
@@ -731,9 +724,9 @@ model CatalogItem {
   kind            CatalogItemKind         @default(PRODUCT)
   category        String
   unit            String                  @default("adet")
-  listPriceMinor  Int                     @default(0)
-  costPriceMinor  Int                     @default(0)
-  vatRate         VatRate                 @default(VAT_TWENTY)
+  listPriceMinor  BigInt                  @default(0)
+  costPriceMinor  BigInt                  @default(0)
+  vatRateBps      Int                     @default(2000)
   trackInventory  Boolean                 @default(true)
   reorderPoint    Int                     @default(0)
   serialized      Boolean                 @default(false)
@@ -813,7 +806,7 @@ model StockMovement {
   fromLocationId String?
   toLocationId   String?
   quantity       Decimal             @db.Decimal(14, 3)
-  unitCostMinor  Int                 @default(0)
+  unitCostMinor  BigInt              @default(0)
   reason         StockMovementReason
   jobId          String?
   reference      String?
@@ -849,11 +842,11 @@ model Invoice {
   status          InvoiceStatus   @default(DRAFT)
   issueDate       DateTime        @default(now())
   dueDate         DateTime
-  subtotalMinor   Int             @default(0)
-  discountMinor   Int             @default(0)
-  vatMinor        Int             @default(0)
-  totalMinor      Int             @default(0)
-  paidMinor       Int             @default(0)
+  subtotalMinor   BigInt          @default(0)
+  discountMinor   BigInt          @default(0)
+  vatMinor        BigInt          @default(0)
+  totalMinor      BigInt          @default(0)
+  paidMinor       BigInt          @default(0)
   currency        String          @default("TRY")
   notes           String?
   createdByUserId String
@@ -885,11 +878,11 @@ model InvoiceLine {
   description    String?
   unit           String       @default("adet")
   quantity       Decimal      @default(1) @db.Decimal(12, 3)
-  unitPriceMinor Int
+  unitPriceMinor BigInt
   discountBps    Int          @default(0)
-  vatRate        VatRate      @default(VAT_TWENTY)
-  lineTotalMinor Int
-  vatMinor       Int
+  vatRateBps     Int          @default(2000)
+  lineTotalMinor BigInt
+  vatMinor       BigInt
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   invoice        Invoice      @relation(fields: [organizationId, invoiceId], references: [organizationId, id], onDelete: Cascade)
   catalogItem    CatalogItem? @relation(fields: [organizationId, catalogItemId], references: [organizationId, id], onDelete: NoAction)
@@ -917,7 +910,7 @@ model Payment {
   id               String        @id @default(cuid())
   organizationId   String
   invoiceId        String
-  amountMinor      Int
+  amountMinor      BigInt
   method           PaymentMethod @default(BANK_TRANSFER)
   status           PaymentStatus @default(SUCCEEDED)
   paidAt           DateTime      @default(now())
@@ -947,7 +940,7 @@ model LaborRate {
   id              String             @id @default(cuid())
   organizationId  String
   memberId        String
-  hourlyRateMinor Int
+  hourlyRateMinor BigInt
   effectiveFrom   DateTime
   createdAt       DateTime           @default(now())
   organization    Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -964,7 +957,7 @@ model CommissionRule {
   name           String
   basis          String       @default("LABOR")
   rateBps        Int
-  capMinor       Int?
+  capMinor       BigInt?
   active         Boolean      @default(true)
   createdAt      DateTime     @default(now())
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -984,8 +977,8 @@ model CostLine {
   kind             CostLineKind
   description      String
   quantity         Decimal         @default(1) @db.Decimal(12, 3)
-  unitAmountMinor  Int
-  amountMinor      Int
+  unitAmountMinor  BigInt
+  amountMinor      BigInt
   occurredAt       DateTime        @default(now())
   organization     Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   job              Job             @relation(fields: [organizationId, jobId], references: [organizationId, id], onDelete: Cascade)
