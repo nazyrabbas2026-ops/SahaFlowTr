@@ -12,6 +12,7 @@ import { JobsModule } from "./jobs/jobs.module";
 import { EmployeesModule } from "./employees/employees.module";
 import { DispatchModule } from "./dispatch/dispatch.module";
 import { ServiceAgreementsModule } from "./service-agreements/service-agreements.module";
+import { CatalogModule } from "./catalog/catalog.module";
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { ServiceAgreementsModule } from "./service-agreements/service-agreements
     EmployeesModule,
     DispatchModule,
     ServiceAgreementsModule,
+    CatalogModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

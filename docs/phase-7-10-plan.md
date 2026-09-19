@@ -91,6 +91,28 @@ sıraya alınacak. İşaretlenmelerinin gerekçesi, üçünün de hedef zincirin
 (sürümleme, onay akışı, ters kayıt kuralları) gerçek kullanım verisi olmadan
 erken dondurma riski taşımasıdır.
 
+### 2.5 Sürümlü fiyat kataloğu (PriceBook) MVP'de yok
+
+Faz 7 kabul ölçütünde "sürümlü fiyat kataloğu/şablon" geçiyor. Bu, ayrı bir
+fiyat kitabı modeli (`PriceBook` / `CatalogItemPrice` + `effectiveFrom`) olarak
+**uygulanmayacak.**
+
+Karar: fiyat sürümlemesi **satır bazlı snapshot** ile karşılanır. `QuoteLine` ve
+`InvoiceLine` kendi `unitPriceMinor`, `vatRateBps` ve `name` değerlerini
+taşıdığı için bir teklif veya fatura, katalog fiyatı sonradan değişse bile
+düzenlendiği andaki fiyatı korur. Belgenin fiyat geçmişi ihtiyacını karşılayan
+şey budur.
+
+Karşılanmayan tek şey, kataloğun **kendi** fiyat geçmişini sorgulayabilmektir
+("bu ürünün fiyatı 6 ay önce neydi"). Bu bilinçli olarak dışarıda bırakıldı:
+tek başına bir model, geçerlilik tarihi çözümlemesi ve fiyat seçimi mantığı
+gerektiriyor, hedef zincire (katalog → teklif → fatura → ödeme) katkısı yok ve
+`CatalogItem` üzerindeki `version` alanı ile audit kaydı kimin ne zaman fiyat
+değiştirdiğini zaten izlenebilir kılıyor.
+
+Yani bu bir unutma değil, kapsam kararıdır. Müşteriye özel fiyat listesi de
+aynı gerekçeyle kapsam dışıdır; teklifler katalog liste fiyatından başlar.
+
 ## 3. Şema durumu ve gerekli migration'lar
 
 Faz 7–10 modellerinin tamamı `20260915122624_field_service_operations`
