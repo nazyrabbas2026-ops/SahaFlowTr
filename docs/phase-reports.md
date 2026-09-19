@@ -244,7 +244,7 @@ gerçekten çalıştırıldı.
 ### COMPLETED
 
 - İş emri durum makinesi (`NEW → SCHEDULED/ASSIGNED → EN_ROUTE → ARRIVED →
-  IN_PROGRESS → ON_HOLD/COMPLETED → INVOICED → PAID`, her durumdan
+IN_PROGRESS → ON_HOLD/COMPLETED → INVOICED → PAID`, her durumdan
   `CANCELLED`'a) `jobs.service.ts` içinde sabit bir geçiş tablosuyla
   uygulandı; `hold`/`cancel` için neden zorunlu.
 - Tenant-scoped CRUD, arama/filtre/sayfalama, atama (`JobAssignment`,
@@ -266,7 +266,7 @@ gerçekten çalıştırıldı.
   `apps/api/src/service-agreements/` modülü (CRUD +
   `POST :id/generate`). `generate()` `JobsService.create()`'i çağırıyor
   (mantık tekrarlanmadı); üretim `(organizationId, serviceAgreementId,
-  periodKey)` üzerindeki `@@unique` kısıtı sayesinde idempotent —
+periodKey)` üzerindeki `@@unique` kısıtı sayesinde idempotent —
   aynı dönem için asla ikinci bir `Job` oluşmaz. Tekrar hesabı
   `packages/domain/src/recurrence.ts`'te saf, unit test'li bir
   fonksiyon (`computeDueOccurrences`).
@@ -512,7 +512,7 @@ kapasite/seyahat, açıklanabilir skor ve provider map."
 - ~~Dispatch skorlaması gerçek teknisyen konumunu kullanmıyor.~~
   **[18.09.2026: düzeltildi, regresyon testiyle korunuyor.]**
 - ~~Faz 5'teki lint/test kırmızı durumu Faz 6'yı da kapsıyor (aynı `pnpm
-  test`/`pnpm lint` çalıştırması).~~ **[18.09.2026: düzeltildi, bkz.
+test`/`pnpm lint` çalıştırması).~~ **[18.09.2026: düzeltildi, bkz.
   GÜNCELLEME bölümü.]**
 
 ### NEXT PHASE
@@ -783,3 +783,44 @@ hiçbir adımın bu dosyalardan etkilenmediği teyit edildi: `pnpm db:generate`
 OK, `pnpm lint` temiz (ESLint markdown dosyalarını zaten ele almıyor),
 `pnpm typecheck` 7/7, `pnpm test` 50/50, `pnpm build` 5/5, `pnpm test:e2e`
 14/14, `pnpm test:smoke` 1/1.
+
+## GÜNCELLEME: Faz 7–10 planı ve Faz 8 ertelemesi (19.09.2026)
+
+Faz 7 (Quotes), Faz 9 (Finance) ve Faz 10 (Inventory) için kapsam çıkarıldı ve
+[Faz 7–10 uygulama planı](phase-7-10-plan.md) belgesine yazıldı: alınan
+kararlar, şema bulguları, bağımlılık sırası, PR sırası ve kapsam dışı
+bırakılanlar gerekçeleriyle birlikte. Bu turda kod yazılmadı.
+
+**Faz 8 (Service Reports) bilinçli olarak ertelendi.** Atlanmasının iki bilinen
+bedeli var ve ikisi de açıkça kabul edildi:
+
+1. Plandaki uçtan uca zincir ("login → müşteri → iş → atama → saha → teklif
+   onayı → **servis** → fatura → ödeme") servis raporu olmadan kapanmaz. Faz 8
+   gate'i, Faz 11 (Analytics) veya Faz 13 (Mobile) başlamadan önce yeniden
+   açılmalıdır.
+2. `StockMovement.reason = JOB_CONSUME` hareketinin doğal kaynağı
+   `ServiceReportMaterial` idi.
+
+İkinci bedele bağlı olarak şu kısıt konuldu: **malzeme tüketimi PR 17'de İş
+Emri'ne bağlı kanonik yol olarak kurulur.** Faz 8 geldiğinde `ServiceReport` bu
+hareketleri referans alır, kendi paralel stok düşüm yolunu açmaz; servis raporu
+malzeme listesi, iş emri üzerinde oluşmuş `StockMovement` kayıtlarının bir
+görünümü olarak uygulanır. Gerekçe: iki ayrı yazma yolu aynı malzemenin iki kez
+düşülmesine ve maliyet subledger'ında (ADR-008, append-only) çift kayda yol
+açar.
+
+Ayrıca üç iş "ticari doğrulama sonrası" olarak işaretlendi ve ilk turda
+yapılmayacak: refund/write-off (PR 11), sürümlü komisyon kuralları (PR 14) ve
+tedarikçi/satın alma (PR 18). Hedef, katalog → teklif → fatura → ödeme kaydı
+zincirinin önce uçtan uca çalışmasıdır. Bu nedenle Faz 10 gate'i PR 17
+tamamlandığında kısmen karşılanır ve satın alma akışı gelene kadar açık kalır.
+
+Şema tarafındaki iki ADR ihlali de kayda geçti ve PR 1 ile PR 16'da
+düzeltilecek: parasal sütunların `Int` olması (ADR-003 bigint diyor) ve
+`StockMovement.jobId`'nin composite foreign key taşımaması (ADR-002).
+
+### TEST RESULTS (19.09.2026)
+
+Bu güncelleme yalnızca belge ekler; kod, şema ve migration değişikliği yok.
+Doğrulama, PR 1 ile gelen ilk kod değişikliğinde `prove-it` aşamasında
+çalıştırılacak.
