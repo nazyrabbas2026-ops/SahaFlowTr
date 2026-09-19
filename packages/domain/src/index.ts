@@ -34,6 +34,9 @@ export const PERMISSIONS = {
   SERVICE_AGREEMENT_GENERATE: "service-agreement.generate",
   INVENTORY_READ: "inventory.read",
   INVENTORY_MANAGE: "inventory.manage",
+  QUOTE_READ: "quote.read",
+  QUOTE_MANAGE: "quote.manage",
+  QUOTE_APPROVE: "quote.approve",
 } as const;
 
 export const OWNER_PERMISSIONS = Object.values(PERMISSIONS);

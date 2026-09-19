@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   Bell,
+  Boxes,
   Building2,
   Check,
   ChevronDown,
@@ -29,6 +30,7 @@ import { Customers } from "../components/customers";
 import { Jobs } from "../components/jobs";
 import { Dispatch } from "../components/dispatch";
 import { Catalog } from "../components/catalog";
+import { ServicePackages } from "../components/service-packages";
 
 const phases = [
   "Mimari ve planlama",
@@ -55,6 +57,7 @@ type Tab =
   | "İş Emirleri"
   | "Dispatch"
   | "Katalog"
+  | "Paketler"
   | "Ekip ve Roller"
   | "Sistem Durumu"
   | "Geliştirme Planı";
@@ -256,6 +259,12 @@ export default function Home() {
           icon: Layers3,
           permission: "inventory.read",
           entitlement: "inventory.products",
+        },
+        {
+          label: "Paketler" as Tab,
+          icon: Boxes,
+          permission: "quote.read",
+          entitlement: "sales.quotes",
         },
         {
           label: "Genel Bakış" as Tab,
@@ -653,6 +662,12 @@ export default function Home() {
               )}
               {tab === "Katalog" && (
                 <Catalog
+                  organizationId={organizationId}
+                  permissions={permissions}
+                />
+              )}
+              {tab === "Paketler" && (
+                <ServicePackages
                   organizationId={organizationId}
                   permissions={permissions}
                 />

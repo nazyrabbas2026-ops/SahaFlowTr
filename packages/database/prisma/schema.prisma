@@ -59,6 +59,7 @@ model Organization {
   quoteLines                     QuoteLine[]
   quotePackageLines              QuotePackageLine[]
   servicePackages                ServicePackage[]
+  servicePackageFamilies         ServicePackageFamily[]
   catalogItems                   CatalogItem[]
   stockLocations                 StockLocation[]
   stockLevels                    StockLevel[]
@@ -676,24 +677,57 @@ model QuotePackageLine {
   @@index([organizationId, quoteId, position])
 }
 
-model ServicePackage {
-  id             String               @id @default(cuid())
+enum ServicePackageTier {
+  ECONOMY
+  RECOMMENDED
+  PREMIUM
+}
+
+/// Aynı hizmetin Ekonomik/Önerilen/Premium seviyelerini bir arada tutar.
+/// Ortak satırlar aile seviyesinde tanımlanır ve ailedeki her pakete
+/// `ServicePackageItem.shared = true` olarak yazılır.
+model ServicePackageFamily {
+  id             String           @id @default(cuid())
   organizationId String
   key            String
   name           String
   description    String?
+  active         Boolean          @default(true)
+  version        Int              @default(1)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  packages       ServicePackage[]
+
+  @@unique([organizationId, id])
+  @@unique([organizationId, key])
+  @@index([organizationId, active])
+}
+
+model ServicePackage {
+  id             String                @id @default(cuid())
+  organizationId String
+  familyId       String?
+  tier           ServicePackageTier?
+  key            String
+  name           String
+  description    String?
   priceMinor     BigInt
-  vatRateBps     Int                  @default(2000)
-  active         Boolean              @default(true)
-  createdAt      DateTime             @default(now())
-  updatedAt      DateTime             @updatedAt
-  organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  vatRateBps     Int                   @default(2000)
+  active         Boolean               @default(true)
+  version        Int                   @default(1)
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  organization   Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  family         ServicePackageFamily? @relation(fields: [organizationId, familyId], references: [organizationId, id], onDelete: Cascade)
   items          ServicePackageItem[]
   quoteLines     QuotePackageLine[]
 
   @@unique([organizationId, id])
   @@unique([organizationId, key])
+  @@unique([organizationId, familyId, tier])
   @@index([organizationId, active])
+  @@index([organizationId, familyId])
 }
 
 model ServicePackageItem {
@@ -702,7 +736,9 @@ model ServicePackageItem {
   catalogItemId  String
   quantity       Decimal        @default(1) @db.Decimal(12, 3)
   addon          Boolean        @default(false)
-  packageName    String?
+  /// Aile seviyesinde tanımlanmış ortak satır; pakete özel satırlardan
+  /// ayrılır ki aile düzenlemesi pakete özel satırları silmesin.
+  shared         Boolean        @default(false)
   package        ServicePackage @relation(fields: [organizationId, packageId], references: [organizationId, id], onDelete: Cascade)
   catalogItem    CatalogItem    @relation(fields: [organizationId, catalogItemId], references: [organizationId, id], onDelete: Restrict)
 

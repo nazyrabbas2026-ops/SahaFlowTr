@@ -113,6 +113,27 @@ değiştirdiğini zaten izlenebilir kılıyor.
 Yani bu bir unutma değil, kapsam kararıdır. Müşteriye özel fiyat listesi de
 aynı gerekçeyle kapsam dışıdır; teklifler katalog liste fiyatından başlar.
 
+### 2.6 Ortak paket satırları çoğaltılarak taşınır
+
+Ekonomik/Önerilen/Premium seviyeleri `ServicePackageFamily` altında toplanır ve
+her paket `tier` alanıyla seviyesini taşır. Ailenin ortak satırları ayrı bir
+tabloda tutulmaz: aile seviyesinde tanımlanan satırlar ailedeki her pakete
+`ServicePackageItem.shared = true` olarak **yazılır**, pakete özel satırlar
+`shared = false` kalır.
+
+Gerekçe: bir paketin etkin satır listesi tek bir sorguyla, birleştirme mantığı
+olmadan okunabiliyor. Teklif oluşturma (PR 4) ve teklif satırı snapshot'ı bu
+listeyi olduğu gibi kullanacak; iki kaynaklı bir liste her okuma noktasında
+aynı birleştirmeyi tekrarlamayı gerektirirdi.
+
+Bedeli, aynı satırın ailedeki paket sayısı kadar kopyalanmasıdır. Bu kabul
+edildi ve tutarlılık şu kurallarla korunuyor: ortak satır listesi yalnızca aile
+ucundan değiştirilir ve tek transaction içinde tüm paketlere yazılır; aileye
+sonradan katılan paket ortak satırları oluşturulurken devralır; aynı katalog
+kalemi hem ortak hem pakete özel olamaz; ortak satır listesi değişince
+paketlerin `version` alanı da artar, böylece elinde eski paketi tutan istemci
+çakışma alır.
+
 ## 3. Şema durumu ve gerekli migration'lar
 
 Faz 7–10 modellerinin tamamı `20260915122624_field_service_operations`
