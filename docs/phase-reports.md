@@ -824,3 +824,77 @@ düzeltilecek: parasal sütunların `Int` olması (ADR-003 bigint diyor) ve
 Bu güncelleme yalnızca belge ekler; kod, şema ve migration değişikliği yok.
 Doğrulama, PR 1 ile gelen ilk kod değişikliğinde `prove-it` aşamasında
 çalıştırılacak.
+
+## PHASE: 7 — PR 1 (para/KDV temeli)
+
+### STATUS
+
+DEVAM EDİYOR. Faz 7'nin ilk iş parçası; kabul ölçütü henüz karşılanmadı.
+[Faz 7–10 uygulama planı](phase-7-10-plan.md) içindeki PR 1 tamamlandı, PR 2
+(CatalogItem CRUD) sıradaki iştir.
+
+### COMPLETED
+
+- Parasal sütunlar `INTEGER`'dan `BIGINT`'e taşındı (ADR-003). Eski tip 21,4
+  milyon TRY'de tavan yapıyordu ve belge toplamlarını taşıyamazdı. Dönüşüm bu
+  tablolar boşken yapıldı; servis katmanı yazıldıktan sonra aynı değişiklik
+  breaking API değişikliği olurdu.
+- KDV oranı `VatRate` enum'undan `vatRateBps INTEGER` basis point sütununa
+  taşındı (%20 → `2000`). Enum'la her mevzuat değişikliği migration ve veri
+  yeniden yazımı gerektiriyordu; basis point'le geçmiş belgeler kendi oranını
+  taşımaya devam ediyor.
+- `packages/domain/src/money.ts` `bigint` üzerinden yeniden yazıldı ve ilk kez
+  testlendi. Belge seviyesindeki indirimde KDV'yi oransal ölçekleyen hata
+  düzeltildi: indirim satırlara kuruş kaybı olmadan dağıtılıyor (en büyük kalan
+  yöntemi) ve KDV her satırın indirimli matrahından yeniden hesaplanıyor.
+  Yuvarlama satır bazında ve sıfırdan uzağa yarım yukarıdır.
+- `bigint` JSON'a serialize edilemediği için dönüşüm API sınırında tek noktada
+  yapılıyor: `BigIntSerializerInterceptor` global interceptor olarak kayıtlı ve
+  değerleri dizgi olarak gönderiyor. `Date`, `Decimal` gibi kendi
+  serializasyonu olan nesnelere dokunmuyor.
+
+### FILES CHANGED
+
+- `packages/database/prisma/schema.prisma`
+- `packages/database/prisma/migrations/20260919112455_money_bigint_vat_bps/migration.sql`
+- `packages/domain/src/money.ts`, `packages/domain/src/money.test.ts` (yeni)
+- `apps/api/src/common/bigint-serializer.interceptor.ts` (yeni) ve testi (yeni)
+- `apps/api/src/app.module.ts`, `apps/api/test/auth.integration.test.ts`
+- `docs/database.md`, `.claude/skills/code-structure/SKILL.md`
+
+### DATABASE
+
+`20260919112455_money_bigint_vat_bps`: `Quote`, `QuoteLine`,
+`QuotePackageLine`, `ServicePackage`, `CatalogItem`, `StockMovement`,
+`Invoice`, `InvoiceLine`, `Payment`, `LaborRate`, `CommissionRule` ve
+`CostLine` tablolarındaki `*Minor` sütunları `BIGINT`'e çevrildi;
+`CatalogItem`, `ServicePackage`, `QuoteLine` ve `InvoiceLine` üzerindeki
+`vatRate` sütunu `vatRateBps`'e taşındı ve `VatRate` tipi düşürüldü. KDV
+dönüşümü veri kaybetmez: yeni sütun eklenir, eski enum değerleri karşılıklarına
+çevrilir, eski sütun ondan sonra düşürülür. Migration uygulandıktan sonra
+`prisma migrate diff` şemaya karşı boş çıktı verdi (sıfır drift).
+
+### API
+
+Yeni endpoint yok. Tek değişiklik global `BigIntSerializerInterceptor`; mevcut
+cevaplar `bigint` alan içermediği için davranışları değişmedi.
+
+### TEST RESULTS (19.09.2026, gerçekten çalıştırıldı)
+
+`pnpm db:generate` OK, `pnpm lint` temiz, `pnpm typecheck` 7/7,
+`pnpm test` 73/73 (18'i yeni `money.test.ts`, 5'i yeni interceptor testi;
+integration testi yeni migration'ı gerçek PostgreSQL 18 üzerine uyguluyor),
+`pnpm build` 5/5, `pnpm test:e2e` 14/14, `pnpm test:smoke` 1/1 (9 migration
+uygulandı).
+
+### KNOWN ISSUES
+
+- Web tarafında henüz parasal alan gösteren ekran yok; serializer'ın dizgi
+  çıktısını okuyan istemci kodu PR 2 ile gelecek.
+- `packages/database/prisma/schema.prisma` içindeki üç `onDelete: SetNull`
+  uyarısı bu PR'dan önce de vardı ve kapsam dışı bırakıldı.
+
+### NEXT PHASE
+
+PR 2 — CatalogItem CRUD (`apps/api/src/catalog`, `inventory.read` /
+`inventory.manage` izinleri, web katalog ekranı).

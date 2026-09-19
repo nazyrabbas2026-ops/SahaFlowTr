@@ -38,5 +38,23 @@ Migrations:
 - `202609140001_workspace_shell`: plan entitlements, subscriptions, onboarding, notifications and new shell permissions.
 - `202609140002_onboarding_member_delete_policy`: preserves onboarding evidence by preventing deletion of its completing member.
 - `202609140003_crm_customers`: müşteri, iletişim, çoklu adres, varlık, tenant sıra numarası, CRM izinleri ve plan entitlement'ı.
+- `20260914125354_jobs`: iş emri, atama, durum geçmişi, not ve iş izinleri.
+- `20260915122624_field_service_operations`: teknisyen profili, vardiya, zaman kaydı, teklif, katalog, stok, fatura, ödeme, maliyet, servis raporu, entegrasyon ve otomasyon tabloları.
+- `20260918105223_service_agreements`: servis sözleşmesi, üretim ledger'ı ve sözleşme izinleri.
+- `20260919112455_money_bigint_vat_bps`: parasal sütunlar `BIGINT`'e, KDV oranı `VatRate` enum'undan `vatRateBps` basis point sütununa taşındı.
+
+## Para ve KDV
+
+Parasal sütunlar `BIGINT` ve kuruş (minor unit) cinsindendir (ADR-003);
+`INTEGER` tavanı 21.474.836,47 TRY olduğu için belge toplamlarını taşıyamazdı.
+`bigint` JSON'a serialize edilemediğinden API sınırında tek bir interceptor
+değerleri dizgiye çevirir.
+
+KDV oranı enum değil, `vatRateBps INTEGER` sütununda basis point olarak tutulur
+(%20 → `2000`): oranlar mevzuatla değişir ve geçmiş belgeler kendi oranını
+taşımaya devam etmelidir. Yuvarlama satır bazında ve sıfırdan uzağa yarım
+yukarıdır; belge seviyesindeki indirim satırlara oranla dağıtılır ve KDV her
+satırın indirim sonrası matrahından yeniden hesaplanır. Hesabın tek kaynağı
+`packages/domain/src/money.ts`'tir.
 
 All migrations are applied to a real ephemeral PostgreSQL 18 instance during integration tests. Tenant boundary, cross-tenant asset/address access, audit, optimistic update and refresh replay scenarios are verified against database constraints and API guards.

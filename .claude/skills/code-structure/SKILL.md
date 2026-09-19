@@ -56,9 +56,18 @@ kullanımını aynı şekilde tekrarla.
 ## Para ve KDV
 
 - Tüm parasal alanlar bigint, minor currency unit (kuruş) cinsinden saklanır.
-  Ondalık/float ile para tutma veya hesaplama ekleme.
-- KDV oranı basis point cinsinden tutulur (`VatRate` enum'una bak); yuvarlama
-  satır bazında yapılır ve davranış açıkça belgelenir (yorum veya docs).
+  Ondalık/float ile para tutma veya hesaplama ekleme; Prisma sütunu `BigInt`,
+  TypeScript tarafı `bigint`'tir.
+- `bigint` JSON'a serialize edilemez. Dönüşüm API sınırında tek noktada,
+  `BigIntSerializerInterceptor` içinde yapılır ve değer dizgi olarak gider
+  (`12345n` → `"12345"`). Modül içinde kendi dönüşümünü yazma.
+- KDV oranı basis point cinsinden `vatRateBps Int` sütununda tutulur (%20 →
+  `2000`); enum kullanma, oranlar mevzuatla değişir. Preset listesi
+  `packages/domain` içindeki `VAT_RATE_PRESETS_BPS`'tedir.
+- Yuvarlama satır bazında ve sıfırdan uzağa yarım yukarı yapılır; hesabı
+  kendin yazma, `packages/domain/src/money.ts` içindeki `priceLine` ve
+  `summarizeLines` fonksiyonlarını kullan. Belge seviyesindeki indirim
+  satırlara dağıtılır ve KDV indirimli matrahtan yeniden hesaplanır.
 
 ## Hassas veri
 
