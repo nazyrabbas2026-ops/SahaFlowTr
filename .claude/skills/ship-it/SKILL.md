@@ -1,6 +1,6 @@
 ---
 name: ship-it
-description: SahaFlowTr'de doğrulanmış bir işi teslim etme aşaması — conventional commit, docs/phase-reports.md güncellemesi, migration/env notlarıyla PR açıklaması. Sadece prove-it aşaması tamamen geçtikten sonra kullan.
+description: SahaFlowTr'de doğrulanmış bir işi teslim etme aşaması — conventional commit, docs/phase-reports.md güncellemesi, migration/env notlarıyla PR açıklaması ve push sonrası CI teyidi. Sadece prove-it aşaması tamamen geçtikten sonra kullan.
 ---
 
 # ship-it (Gönder)
@@ -42,6 +42,24 @@ PR açıklamasında en az şunları belirt:
   gerekip gerekmediği (bkz. ADR-006).
 - `prove-it` aşamasında hangi komutların çalıştırıldığı ve sonucu (test
   planı / checklist olarak).
+
+## Push sonrası CI teyidi
+
+**Push edilmiş bir değişiklik, GitHub Actions koşumu yeşil görülmeden
+tamamlanmış sayılmaz.** Merge ve push'tan sonra koşumun bitmesini bekle,
+`conclusion` değerinin `success` olduğunu teyit et ve sonucu raporla.
+
+- Depoda `gh` CLI kurulu değil; koşum durumu GitHub REST API'sinden okunur:
+  `https://api.github.com/repos/<owner>/<repo>/actions/runs?per_page=1&branch=main`,
+  ardından dönen `id` ile `.../actions/runs/<id>` sorgulanır. `status`
+  `completed` olana kadar beklenir, sonra `conclusion` okunur.
+- **Migration içeren değişikliklerde bu adım özellikle zorunludur.** CI
+  migration'ları temiz bir veritabanına sıfırdan uygular; yereldeki
+  veritabanında migration'lar artımlı olarak birikmiştir ve şema o yoldan
+  geçerek oluşmuştur. Yerelde geçmesi, sıfırdan kurulumda da geçeceğinin
+  kanıtı değildir.
+- CI kırmızıysa iş bitmemiştir: `prove-it` aşamasına dönülür, sorun düzeltilir
+  ve yeni bir koşum yeşil olana kadar sonraki iş parçasına geçilmez.
 
 ## Son kontrol
 
