@@ -32,6 +32,7 @@ async function applyMigrations() {
     "20260919112455_money_bigint_vat_bps",
     "20260919114244_catalog_item_version",
     "20260919121520_service_package_families",
+    "20260919144338_quote_options",
   ]) {
     const sql = await readFile(
       resolve(
@@ -1026,5 +1027,190 @@ describe("auth, organization and tenant isolation", () => {
       )
       .send({ version: 1, items: [] })
       .expect(404);
+  });
+
+  it("computes quote option totals from shared and option lines", async () => {
+    const owner = request.agent(app.getHttpServer());
+    const intruder = request.agent(app.getHttpServer());
+    const registration = await owner
+      .post("/api/v1/auth/register")
+      .set("X-Forwarded-For", "198.51.100.51")
+      .send({
+        name: "Teklif Sahibi",
+        email: "quote-owner@example.com",
+        password: "GuvenliParola2060",
+        organizationName: "Teklif Organizasyonu",
+      })
+      .expect(201);
+    const intruderRegistration = await intruder
+      .post("/api/v1/auth/register")
+      .set("X-Forwarded-For", "198.51.100.52")
+      .send({
+        name: "Yabancı Teklifçi",
+        email: "quote-intruder@example.com",
+        password: "GuvenliParola2061",
+        organizationName: "Yabancı Teklif Organizasyonu",
+      })
+      .expect(201);
+    const organizationId = registration.body.organizations[0].id as string;
+    const intruderOrganizationId = intruderRegistration.body.organizations[0]
+      .id as string;
+    const base = `/api/v1/organizations/${organizationId}`;
+    const quotes = `${base}/quotes`;
+
+    const customer = await owner
+      .post(`${base}/customers`)
+      .send({ type: "COMPANY", companyName: "Teklif Müşterisi", tags: [] })
+      .expect(201);
+
+    const created = await owner
+      .post(quotes)
+      .send({
+        customerId: customer.body.id,
+        title: "Klima bakım teklifi",
+        validUntil: "2026-12-31",
+      })
+      .expect(201);
+    const quoteId = created.body.id as string;
+    // Numara seri + yıl + sıra biçimindedir ve sayaç yıl bazında sıfırlanır.
+    expect(created.body.quoteNumber).toMatch(/^TEK-\d{4}-000001$/);
+    expect(created.body.status).toBe("DRAFT");
+
+    const withOptions = await owner
+      .put(`${quotes}/${quoteId}/options`)
+      .send({
+        version: created.body.version,
+        options: [
+          { tier: "ECONOMY", name: "Ekonomik" },
+          { tier: "PREMIUM", name: "Premium" },
+        ],
+      })
+      .expect(200);
+    expect(withOptions.body.options).toHaveLength(2);
+    const economyId = withOptions.body.options.find(
+      (option: { tier: string }) => option.tier === "ECONOMY",
+    ).id as string;
+    const premiumId = withOptions.body.options.find(
+      (option: { tier: string }) => option.tier === "PREMIUM",
+    ).id as string;
+
+    // Ortak satır: 2 × 1.250,00 = 2.500,00 (+%20 KDV).
+    // Premium satırı: 1 × 800,00 (+%10 KDV).
+    const withLines = await owner
+      .put(`${quotes}/${quoteId}/lines`)
+      .send({
+        version: withOptions.body.version,
+        lines: [
+          {
+            name: "Klima bakımı",
+            quantity: "2",
+            unitPriceMinor: "125000",
+            vatRateBps: 2000,
+          },
+          {
+            optionId: premiumId,
+            name: "Gaz dolumu",
+            quantity: "1",
+            unitPriceMinor: "80000",
+            vatRateBps: 1000,
+          },
+        ],
+      })
+      .expect(200);
+
+    const economy = withLines.body.options.find(
+      (option: { id: string }) => option.id === economyId,
+    );
+    const premium = withLines.body.options.find(
+      (option: { id: string }) => option.id === premiumId,
+    );
+    // Ekonomik yalnızca ortak satırı taşır: 2.500,00 + 500,00 KDV.
+    expect(economy).toMatchObject({
+      subtotalMinor: "250000",
+      vatMinor: "50000",
+      totalMinor: "300000",
+    });
+    // Premium ortak satır + kendi satırı: 3.300,00 ve karışık oranlı KDV.
+    expect(premium).toMatchObject({
+      subtotalMinor: "330000",
+      vatMinor: "58000",
+      totalMinor: "388000",
+    });
+    // Seçim yapılmadan teklif toplamı yalnızca ortak satırlardır.
+    expect(withLines.body).toMatchObject({
+      subtotalMinor: "250000",
+      totalMinor: "300000",
+      selectedOptionId: null,
+    });
+
+    const selected = await owner
+      .post(`${quotes}/${quoteId}/select-option`)
+      .send({ version: withLines.body.version, optionId: premiumId })
+      .expect(201);
+    expect(selected.body).toMatchObject({
+      selectedOptionId: premiumId,
+      subtotalMinor: "330000",
+      vatMinor: "58000",
+      totalMinor: "388000",
+    });
+
+    // Belge seviyesindeki indirim satırlara dağıtılır ve KDV indirimli
+    // matrahtan yeniden hesaplanır; oransal ölçekleme yapılmaz.
+    const discounted = await owner
+      .patch(`${quotes}/${quoteId}`)
+      .send({ version: selected.body.version, discountMinor: "33000" })
+      .expect(200);
+    expect(discounted.body).toMatchObject({
+      subtotalMinor: "330000",
+      discountMinor: "33000",
+      vatMinor: "52200",
+      totalMinor: "349200",
+    });
+
+    // İndirim ara toplamı aşamaz.
+    const clamped = await owner
+      .patch(`${quotes}/${quoteId}`)
+      .send({ version: discounted.body.version, discountMinor: "99999999" })
+      .expect(200);
+    expect(clamped.body).toMatchObject({
+      discountMinor: "330000",
+      vatMinor: "0",
+      totalMinor: "0",
+    });
+
+    // Eski sürümle güncelleme çakışmalı.
+    await owner
+      .patch(`${quotes}/${quoteId}`)
+      .send({ version: 1, title: "Eski sürüm" })
+      .expect(409);
+
+    // Başka teklifin seçeneği bu teklifin satırına bağlanamaz.
+    await owner
+      .put(`${quotes}/${quoteId}/lines`)
+      .send({
+        version: clamped.body.version,
+        lines: [
+          {
+            optionId: customer.body.id,
+            name: "Yanlış seçenek",
+            quantity: "1",
+            unitPriceMinor: "1000",
+          },
+        ],
+      })
+      .expect(404);
+
+    // Başka tenant ne okuyabilmeli ne yazabilmeli.
+    await intruder
+      .get(`/api/v1/organizations/${intruderOrganizationId}/quotes/${quoteId}`)
+      .expect(404);
+    await intruder.get(quotes).expect(403);
+
+    const list = await owner
+      .get(quotes)
+      .query({ search: "Klima", status: "DRAFT", page: 1, pageSize: 10 })
+      .expect(200);
+    expect(list.body.items).toHaveLength(1);
+    expect(list.body.items[0].quoteNumber).toBe(created.body.quoteNumber);
   });
 });

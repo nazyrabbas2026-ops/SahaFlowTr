@@ -17,7 +17,7 @@ const owner = {
   organizationName: `Smoke Test Servis ${stamp}`,
 };
 
-test("registers, creates a customer with blank contact fields, then a job", async ({
+test("registers, creates a customer, a job, then a quote with a computed total", async ({
   page,
 }) => {
   const failures: string[] = [];
@@ -63,13 +63,41 @@ test("registers, creates a customer with blank contact fields, then a job", asyn
   await page.getByLabel("Kategori").fill("Klima");
   await page.getByRole("button", { name: "Kaydet" }).click();
 
-  await expect(page.getByRole("heading", { name: "Yıllık bakım" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Yıllık bakım" }),
+  ).toBeVisible();
 
   // Liste görünümünde de kalıcı olmalı (detay ekranındaki yerel state değil).
   await page.getByRole("button", { name: "İş emirlerine dön" }).click();
   // İş emri numarası içinde bulunulan yılı taşır, bu yüzden yıl sabitlenmez.
   await expect(page.getByText(/WO-\d{4}-000001/)).toBeVisible();
   await expect(page.getByText("Boş İletişim")).toBeVisible();
+
+  // Teklif zinciri: katalogdan bir kalem, ondan bir teklif satırı ve toplamın
+  // gerçekten backend'de hesaplanıp doğru döndüğü. Toplam istemcide
+  // hesaplanmadığı için burada görünen değer API'nin ürettiği değerdir.
+  await page.getByRole("button", { name: "Teklifler", exact: true }).click();
+  await expect(page.getByText("Teklif bulunmuyor.")).toBeVisible();
+  await page.getByRole("button", { name: "Yeni teklif" }).click();
+  await page.getByLabel("Müşteri").selectOption({ index: 1 });
+  await page.getByLabel("Başlık").fill("Klima bakım teklifi");
+  await page.getByRole("button", { name: "Kaydet" }).click();
+
+  await expect(
+    page.getByRole("heading", { name: "Klima bakım teklifi" }),
+  ).toBeVisible();
+  await expect(page.getByText(/TEK-\d{4}-000001/)).toBeVisible();
+
+  await page.getByRole("button", { name: "Düzenle" }).click();
+  await page.getByRole("button", { name: "Satır ekle" }).click();
+  await page.getByLabel("Satır adı").fill("Klima bakımı");
+  await page.getByLabel("Miktar").fill("2");
+  await page.getByLabel("Birim fiyat (TL)").fill("1.250,00");
+  await page.getByRole("button", { name: "Kaydet" }).click();
+
+  // 2 × 1.250,00 = 2.500,00 + %20 KDV = 3.000,00.
+  await expect(page.getByText("₺3.000,00")).toBeVisible();
+  await expect(page.getByText("KDV ₺500,00")).toBeVisible();
 
   expect(failures, `başarısız API çağrıları: ${failures.join(", ")}`).toEqual(
     [],

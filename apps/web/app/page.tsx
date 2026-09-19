@@ -5,6 +5,7 @@ import {
   Activity,
   Bell,
   Boxes,
+  FileText,
   Building2,
   Check,
   ChevronDown,
@@ -31,6 +32,7 @@ import { Jobs } from "../components/jobs";
 import { Dispatch } from "../components/dispatch";
 import { Catalog } from "../components/catalog";
 import { ServicePackages } from "../components/service-packages";
+import { Quotes } from "../components/quotes";
 
 const phases = [
   "Mimari ve planlama",
@@ -58,6 +60,7 @@ type Tab =
   | "Dispatch"
   | "Katalog"
   | "Paketler"
+  | "Teklifler"
   | "Ekip ve Roller"
   | "Sistem Durumu"
   | "Geliştirme Planı";
@@ -263,6 +266,12 @@ export default function Home() {
         {
           label: "Paketler" as Tab,
           icon: Boxes,
+          permission: "quote.read",
+          entitlement: "sales.quotes",
+        },
+        {
+          label: "Teklifler" as Tab,
+          icon: FileText,
           permission: "quote.read",
           entitlement: "sales.quotes",
         },
@@ -668,6 +677,12 @@ export default function Home() {
               )}
               {tab === "Paketler" && (
                 <ServicePackages
+                  organizationId={organizationId}
+                  permissions={permissions}
+                />
+              )}
+              {tab === "Teklifler" && (
+                <Quotes
                   organizationId={organizationId}
                   permissions={permissions}
                 />

@@ -60,6 +60,7 @@ model Organization {
   quotePackageLines              QuotePackageLine[]
   servicePackages                ServicePackage[]
   servicePackageFamilies         ServicePackageFamily[]
+  quoteOptions                   QuoteOption[]
   catalogItems                   CatalogItem[]
   stockLocations                 StockLocation[]
   stockLevels                    StockLevel[]
@@ -303,7 +304,8 @@ model Job {
   statusHistory                  JobStatusHistory[]
   notes                          JobNote[]
   timeEntries                    TimeEntry[]
-  quotes                         Quote[]
+  quotes                         Quote[]                         @relation("QuoteSourceJob")
+  convertedFromQuotes            Quote[]                         @relation("QuoteConvertedJob")
   serviceReport                  ServiceReport?
   jobAttachments                 JobAttachment[]
   invoices                       Invoice[]
@@ -593,53 +595,91 @@ enum QuoteLineKind {
 }
 
 model Quote {
-  id              String             @id @default(cuid())
-  organizationId  String
-  customerId      String
-  jobId           String?
-  quoteNumber     String
-  status          QuoteStatus        @default(DRAFT)
-  title           String
-  description     String?
-  validUntil      DateTime
-  versionNumber   Int                @default(1)
-  parentQuoteId   String?
-  subtotalMinor   BigInt             @default(0)
-  discountMinor   BigInt             @default(0)
-  vatMinor        BigInt             @default(0)
-  totalMinor      BigInt             @default(0)
-  currency        String             @default("TRY")
-  terms           String?
-  shareTokenHash  String?
-  approvedAt      DateTime?
-  approvedByName  String?
-  rejectionReason String?
-  convertedAt     DateTime?
-  createdByUserId String
-  version         Int                @default(1)
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
-  organization    Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  customer        Customer           @relation(fields: [organizationId, customerId], references: [organizationId, id], onDelete: Restrict)
-  job             Job?               @relation(fields: [organizationId, jobId], references: [organizationId, id], onDelete: NoAction)
-  parent          Quote?             @relation("QuoteRevision", fields: [organizationId, parentQuoteId], references: [organizationId, id], onDelete: NoAction)
-  revisions       Quote[]            @relation("QuoteRevision")
-  lines           QuoteLine[]
-  packageLines    QuotePackageLine[]
-  invoices        Invoice[]
-  auditDocuments  AuditDocument[]
+  id               String             @id @default(cuid())
+  organizationId   String
+  customerId       String
+  jobId            String?
+  quoteNumber      String
+  status           QuoteStatus        @default(DRAFT)
+  title            String
+  description      String?
+  validUntil       DateTime
+  versionNumber    Int                @default(1)
+  parentQuoteId    String?
+  subtotalMinor    BigInt             @default(0)
+  discountMinor    BigInt             @default(0)
+  vatMinor         BigInt             @default(0)
+  totalMinor       BigInt             @default(0)
+  currency         String             @default("TRY")
+  terms            String?
+  shareTokenHash   String?
+  approvedAt       DateTime?
+  approvedByName   String?
+  rejectionReason  String?
+  convertedAt      DateTime?
+  /// Teklif onaylanınca doğan iş emri. `jobId` ise teklifin çıktığı kaynak
+  /// iştir; ikisi ayrı tutulmazsa dönüşümün tekrarlanıp tekrarlanmadığı
+  /// anlaşılamaz. Unique kısıt aynı işin iki teklifden doğmasını engeller.
+  convertedJobId   String?
+  selectedOptionId String?
+  createdByUserId  String
+  version          Int                @default(1)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  organization     Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer         Customer           @relation(fields: [organizationId, customerId], references: [organizationId, id], onDelete: Restrict)
+  job              Job?               @relation("QuoteSourceJob", fields: [organizationId, jobId], references: [organizationId, id], onDelete: NoAction)
+  convertedJob     Job?               @relation("QuoteConvertedJob", fields: [organizationId, convertedJobId], references: [organizationId, id], onDelete: NoAction)
+  selectedOption   QuoteOption?       @relation("QuoteSelectedOption", fields: [organizationId, selectedOptionId], references: [organizationId, id], onDelete: NoAction)
+  parent           Quote?             @relation("QuoteRevision", fields: [organizationId, parentQuoteId], references: [organizationId, id], onDelete: NoAction)
+  revisions        Quote[]            @relation("QuoteRevision")
+  options          QuoteOption[]      @relation("QuoteOptions")
+  lines            QuoteLine[]
+  packageLines     QuotePackageLine[]
+  invoices         Invoice[]
+  auditDocuments   AuditDocument[]
 
   @@unique([organizationId, id])
   @@unique([organizationId, quoteNumber])
+  @@unique([organizationId, convertedJobId])
   @@index([organizationId, status, validUntil])
   @@index([organizationId, customerId, createdAt])
   @@index([organizationId, jobId])
+}
+
+/// Bir teklifin Ekonomik/Önerilen/Premium seçeneği. Seçeneğe bağlı olmayan
+/// satırlar (`QuoteLine.optionId = null`) her seçenekte ortaktır; seçeneğin
+/// toplamı ortak satırlar ile kendi satırlarının toplamıdır.
+model QuoteOption {
+  id             String             @id @default(cuid())
+  organizationId String
+  quoteId        String
+  tier           ServicePackageTier
+  name           String
+  description    String?
+  position       Int                @default(0)
+  packageId      String?
+  subtotalMinor  BigInt             @default(0)
+  vatMinor       BigInt             @default(0)
+  totalMinor     BigInt             @default(0)
+  createdAt      DateTime           @default(now())
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  quote          Quote              @relation("QuoteOptions", fields: [organizationId, quoteId], references: [organizationId, id], onDelete: Cascade)
+  package        ServicePackage?    @relation(fields: [organizationId, packageId], references: [organizationId, id], onDelete: NoAction)
+  lines          QuoteLine[]
+  selectedBy     Quote[]            @relation("QuoteSelectedOption")
+
+  @@unique([organizationId, id])
+  @@unique([organizationId, quoteId, tier])
+  @@index([organizationId, quoteId, position])
 }
 
 model QuoteLine {
   id             String        @id @default(cuid())
   organizationId String
   quoteId        String
+  /// Boşsa satır tüm seçeneklerde ortaktır; doluysa yalnızca o seçeneğe aittir.
+  optionId       String?
   position       Int
   kind           QuoteLineKind @default(SERVICE)
   catalogItemId  String?
@@ -655,10 +695,12 @@ model QuoteLine {
   createdAt      DateTime      @default(now())
   organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   quote          Quote         @relation(fields: [organizationId, quoteId], references: [organizationId, id], onDelete: Cascade)
+  option         QuoteOption?  @relation(fields: [organizationId, optionId], references: [organizationId, id], onDelete: Cascade)
   catalogItem    CatalogItem?  @relation(fields: [organizationId, catalogItemId], references: [organizationId, id], onDelete: NoAction)
 
   @@unique([organizationId, id])
   @@index([organizationId, quoteId, position])
+  @@index([organizationId, optionId])
 }
 
 model QuotePackageLine {
@@ -722,6 +764,7 @@ model ServicePackage {
   family         ServicePackageFamily? @relation(fields: [organizationId, familyId], references: [organizationId, id], onDelete: Cascade)
   items          ServicePackageItem[]
   quoteLines     QuotePackageLine[]
+  quoteOptions   QuoteOption[]
 
   @@unique([organizationId, id])
   @@unique([organizationId, key])
