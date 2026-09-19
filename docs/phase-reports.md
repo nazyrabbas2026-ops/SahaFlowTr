@@ -1072,3 +1072,111 @@ serviste kontrol edilip 409'a çevrildi; kısıt ihlali istemciye 500 dönüyord
 
 PR 4 — Quote CRUD + satır hesaplama (`QuoteOption` migration'ı, satır ve opsiyon
 toplamları, `OrganizationSequence` ile teklif numarası, web teklif editörü).
+
+## PHASE: 7 — PR 4 (teklif CRUD ve satır hesaplama)
+
+### STATUS
+
+DEVAM EDİYOR. [Faz 7–10 uygulama planı](phase-7-10-plan.md) içindeki PR 4
+tamamlandı; sıradaki iş PR 5 (teklif yaşam döngüsü ve `QuoteEvent` timeline).
+Faz 7 kabul ölçütü hâlâ açık.
+
+### COMPLETED
+
+- `QuoteOption` eklendi: bir teklifin Ekonomik/Önerilen/Premium seçeneği.
+  Seçeneğe bağlı olmayan satırlar (`QuoteLine.optionId = null`) tüm
+  seçeneklerde ortaktır; seçeneğin toplamı ortak satırlar ile kendi
+  satırlarının toplamıdır.
+- Teklif toplamı ortak satırlar ile **seçili** seçeneğin satırlarıdır. Seçim
+  yapılmamışsa yalnızca ortak satırlar sayılır: hangi seçeneğin satılacağı
+  belli değilken rastgele birini saymak uydurma bir toplam üretirdi.
+- Hesap tamamen `packages/domain/src/money.ts` üzerinden yapılır; serviste
+  ikinci bir fiyat/KDV mantığı yoktur. `summarizeLines`'ın girdi tipi
+  `DocumentLineInput`'a daraltıldı: fonksiyon satırın kendi KDV'sini
+  kullanmıyor, yeniden hesaplıyor; çağıranın kullanılmayan bir sütunu okumasını
+  gerektirmesi için bir sebep yoktu.
+- Belge seviyesindeki indirim satırlara dağıtılır ve KDV indirimli matrahtan
+  yeniden hesaplanır; indirim ara toplamı aşamaz. Karışık oranlı (%20 + %10)
+  bir teklifte doğrulandı.
+- Teklif numarası ortak `allocateDocumentNumber` yardımcısıyla üretilir:
+  `TEK-2026-000001`. Sayaç `OrganizationSequence` üzerinde `"seri:yıl"`
+  anahtarıyla tutulur, yani her yıl sıfırlanır. Fatura numaralandırması (PR 9)
+  aynı yardımcıyı kendi serisiyle kullanacak.
+- Pakete bağlı seçenek eklendiğinde satırlar paketten **snapshot** olarak
+  üretilir: fiyat ve KDV o anki katalog değerleriyle dondurulur, katalog
+  sonradan değişse de teklif değişmez.
+- Yalnızca `DRAFT` teklif düzenlenebilir; sonraki durum geçişleri PR 5
+  kapsamındadır.
+- Web tarafında teklif editörü: liste, oluşturma formu, üç seçeneği yan yana
+  gösteren detay, paketten seçenek üretme, seçenek seçme ve satır düzenleyici.
+
+### FILES CHANGED
+
+- `apps/api/src/quotes/{quotes.module,quotes.controller,quotes.service,quotes.schemas}.ts` (yeni)
+- `apps/api/src/common/document-number.ts` (yeni), `apps/api/src/app.module.ts`
+- `packages/domain/src/money.ts`, `packages/database/prisma/schema.prisma`
+- `packages/database/prisma/migrations/20260919144338_quote_options/migration.sql` (yeni)
+- `apps/web/components/quotes.tsx`, `quotes.helpers.ts`, `quotes.helpers.test.ts` (yeni)
+- `apps/web/app/page.tsx`, `apps/web/app/globals.css`
+- `apps/api/test/auth.integration.test.ts`, `tests/smoke/customer-job-flow.smoke.spec.ts`
+- `.claude/skills/prove-it/SKILL.md`
+
+### DATABASE
+
+`20260919144338_quote_options`: `QuoteOption` tablosu, `QuoteLine.optionId`,
+`Quote.selectedOptionId` ve `Quote.convertedJobId` eklendi.
+`(organizationId, quoteId, tier)` unique kısıtı bir teklifte aynı seviyeden iki
+seçeneği engeller. Tüm ilişkiler composite `(organizationId, ...)` foreign key
+ile bağlıdır (ADR-002). Geriye dönük uyumlu, backfill gerekmiyor.
+
+`Quote.convertedJobId` planda PR 8'e aitti, aynı tabloya ikinci bir migration
+açmamak için şimdi additive olarak eklendi ve **bu PR'da yazılmıyor**. Teklif
+onaylanınca doğan iş emrini tutacak; `Quote.jobId` ise teklifin çıktığı kaynak
+iştir. `(organizationId, convertedJobId)` unique kısıtı aynı işin iki teklifden
+doğmasını engeller, yani PR 8'in idempotency garantisi şemada hazır.
+
+### API
+
+`/api/v1/organizations/:organizationId/quotes` altında `GET` (liste), `POST`,
+`GET /:quoteId`, `PATCH /:quoteId`, `PUT /:quoteId/options`,
+`PUT /:quoteId/lines` ve `POST /:quoteId/select-option`. `quote.read` /
+`quote.manage` izinleri ve `sales.quotes` entitlement'ı arkasında; kota
+kontrolü tenant satırı kilitlenerek transaction içinde yapılır (ADR-009).
+
+### TEST RESULTS (19.09.2026, gerçekten çalıştırıldı)
+
+Ön kontrol uygulandı: 5432 ve 55432 portlarını tutan artık postgres süreçleri
+iki kez bulundu ve temizlendi (ilki takılmaya sebep olduktan sonra).
+`pnpm db:generate` OK, `pnpm lint` temiz, `pnpm typecheck` 7/7,
+`pnpm test` 105/105, `pnpm build` 5/5, `pnpm test:e2e` 14/14,
+`pnpm test:smoke` 1/1 (12 migration uygulandı).
+
+Smoke zinciri büyütüldü: kayıt → müşteri → iş emri → **teklif oluştur → satır
+ekle → toplam doğru**. Toplam istemcide hesaplanmadığı için ekranda görünen
+₺3.000,00 doğrudan API'nin ürettiği değerdir. Bu strateji kararı
+(`tests/smoke` zincirini büyütmek, izole ekran senaryosu yazmamak)
+`prove-it` skill'ine tek cümle olarak yazıldı.
+
+Yeni testler: 8 web helper birim testi ve gerçek PostgreSQL üzerinde bir
+entegrasyon senaryosu — seçenek toplamlarının ortak + seçeneğe özel satırdan
+üretilmesi, seçim yokken yalnızca ortak satırların sayılması, karışık oranlı
+KDV, belge indiriminin dağıtılması ve ara toplamla sınırlanması, numara
+biçimi, optimistic çakışma, başka teklifin seçeneğine bağlanma denemesinde 404
+ve cross-tenant 404/403.
+
+### KNOWN ISSUES
+
+- İş emri numarası (`WO-2026-000001`) etiketinde yıl taşıyor ama sayacı yıl
+  bazında sıfırlanmıyor; `jobs.service.ts` ömür boyu artan tek bir sayaç
+  kullanıyor. Teklif ve fatura için doğru desen `allocateDocumentNumber`
+  içinde; iş emri numaralandırmasının buna taşınması ayrı bir iştir ve bu
+  PR'ın kapsamı dışında bırakıldı.
+- Seçenek kümesi değiştirildiğinde seçeneğe bağlı satırlar cascade ile silinir
+  ve pakete bağlı seçenekler yeniden üretilir; elle girilmiş seçenek satırları
+  korunmaz. Ortak satırlara dokunulmaz.
+- Teklif silme/iptal ucu yok; durum geçişleri PR 5 kapsamında.
+
+### NEXT PHASE
+
+PR 5 — Teklif yaşam döngüsü ve `QuoteEvent` timeline (SENT/REJECTED/EXPIRED
+geçişleri, revizyon, süre dolumu için worker işi).

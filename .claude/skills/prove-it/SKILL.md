@@ -75,6 +75,10 @@ Get-Process postgres -ErrorAction SilentlyContinue | Stop-Process -Force
    listesini dizinden okuduğu için yeni migration'ın gerçekten uygulandığını
    da doğrular.
 
+**E2E stratejisi:** yeni ekranlar için izole Playwright senaryosu yazmak yerine
+`tests/smoke` içindeki uçtan uca zincir büyütülür; her PR kendi adımını bu tek
+senaryoya ekler.
+
 ## Migration kontrolü
 
 Prisma şemasında değişiklik yaptıysan:

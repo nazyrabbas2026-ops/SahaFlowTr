@@ -118,7 +118,9 @@ export function allocateProportionally(
     return weights.map(() => 0n);
   }
   const shares = weights.map((weight) => (weight * amountMinor) / weightSum);
-  const remainders = weights.map((weight) => (weight * amountMinor) % weightSum);
+  const remainders = weights.map(
+    (weight) => (weight * amountMinor) % weightSum,
+  );
   // Artan kuruş sayısı her zaman satır sayısından küçüktür.
   const leftover = Number(
     amountMinor - shares.reduce((sum, share) => sum + share, 0n),
@@ -139,6 +141,16 @@ export function allocateProportionally(
   return shares.map((share, index) => (extra.has(index) ? share + 1n : share));
 }
 
+/**
+ * Belge toplamı için satırdan yalnızca indirimli satır tutarı ve KDV oranı
+ * gerekir; satırın kendi KDV'si yeniden hesaplandığı için istenmez. Böylece
+ * çağıran taraf kullanılmayan bir sütunu okumak zorunda kalmaz.
+ */
+export type DocumentLineInput = Pick<
+  PricingLineResult,
+  "lineTotalMinor" | "vatRateBps"
+>;
+
 export interface DocumentTotals {
   subtotalMinor: bigint;
   discountMinor: bigint;
@@ -152,17 +164,15 @@ export interface DocumentTotals {
  * dağıtılır ve KDV her satırın indirim sonrası matrahından yeniden hesaplanır.
  */
 export function summarizeLines(
-  lines: readonly PricingLineResult[],
+  lines: readonly DocumentLineInput[],
   documentDiscountMinor: bigint = 0n,
 ): DocumentTotals {
   const subtotalMinor = lines.reduce(
     (sum, line) => sum + line.lineTotalMinor,
     0n,
   );
-  const requested =
-    documentDiscountMinor < 0n ? 0n : documentDiscountMinor;
-  const discountMinor =
-    requested > subtotalMinor ? subtotalMinor : requested;
+  const requested = documentDiscountMinor < 0n ? 0n : documentDiscountMinor;
+  const discountMinor = requested > subtotalMinor ? subtotalMinor : requested;
   const allocated = allocateProportionally(
     discountMinor,
     lines.map((line) => line.lineTotalMinor),

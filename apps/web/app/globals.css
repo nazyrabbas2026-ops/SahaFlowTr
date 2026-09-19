@@ -1971,3 +1971,10 @@ th {
     grid-template-columns: 1fr;
   }
 }
+
+/* Teklif başlığındaki toplam bloğu. */
+.quote-total {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+}
